@@ -1,25 +1,62 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { UrlInputForm } from '@/components/UrlInputForm';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
-import { mockAnalysisResult } from '@/lib/mockData';
+import { analyzeResponseSheet } from '@/lib/api/analyzeSheet';
+import type { AnalysisResult } from '@/lib/mockData';
 import { FileText, Shield, Zap } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 type AppState = 'input' | 'loading' | 'results';
 
 const Index = () => {
   const [appState, setAppState] = useState<AppState>('input');
-  const [analysisResult, setAnalysisResult] = useState(mockAnalysisResult);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const analysisPromise = useRef<Promise<void> | null>(null);
+  const { toast } = useToast();
 
-  const handleAnalyze = (url: string) => {
+  const handleAnalyze = async (url: string) => {
     console.log('Analyzing URL:', url);
+    setIsLoading(true);
     setAppState('loading');
+    
+    // Start the API call
+    analysisPromise.current = analyzeResponseSheet(url).then((response) => {
+      if (response.success && response.data) {
+        setAnalysisResult(response.data);
+      } else {
+        toast({
+          title: "Analysis Failed",
+          description: response.error || "Failed to analyze the response sheet",
+          variant: "destructive",
+        });
+        setAppState('input');
+      }
+      setIsLoading(false);
+    }).catch((error) => {
+      console.error('Analysis error:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+      setAppState('input');
+      setIsLoading(false);
+    });
   };
 
   const handleLoadingComplete = () => {
-    // In production, this would be the actual API response
-    setAnalysisResult(mockAnalysisResult);
-    setAppState('results');
+    // Wait for analysis to complete if still running
+    if (analysisPromise.current) {
+      analysisPromise.current.then(() => {
+        if (analysisResult) {
+          setAppState('results');
+        }
+      });
+    } else if (analysisResult) {
+      setAppState('results');
+    }
   };
 
   const handleBack = () => {
@@ -30,7 +67,7 @@ const Index = () => {
     return <LoadingScreen onComplete={handleLoadingComplete} />;
   }
 
-  if (appState === 'results') {
+  if (appState === 'results' && analysisResult) {
     return <ResultsDashboard result={analysisResult} onBack={handleBack} />;
   }
 
@@ -65,7 +102,7 @@ const Index = () => {
           </div>
 
           {/* URL Input Form */}
-          <UrlInputForm onAnalyze={handleAnalyze} isLoading={false} />
+          <UrlInputForm onAnalyze={handleAnalyze} isLoading={isLoading} />
 
           {/* Trust Indicators */}
           <div className="flex flex-wrap justify-center gap-6 mt-12">
