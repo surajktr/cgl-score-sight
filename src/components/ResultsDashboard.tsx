@@ -3,8 +3,11 @@ import { CandidateInfoCard } from './CandidateInfoCard';
 import { ScoreSummaryCard } from './ScoreSummaryCard';
 import { SectionBreakdown } from './SectionBreakdown';
 import { QuestionsTable } from './QuestionsTable';
-import { Download, ArrowLeft, Printer } from 'lucide-react';
+import { Download, ArrowLeft, Printer, Loader2 } from 'lucide-react';
 import type { AnalysisResult } from '@/lib/mockData';
+import { usePdfGenerator } from '@/hooks/usePdfGenerator';
+import { useToast } from '@/hooks/use-toast';
+import { Progress } from '@/components/ui/progress';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -12,9 +15,24 @@ interface ResultsDashboardProps {
 }
 
 export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
-  const handleDownloadPdf = () => {
-    // TODO: Implement PDF generation
-    alert('PDF download will be implemented with backend integration');
+  const { generatePdf, isGenerating, progress } = usePdfGenerator();
+  const { toast } = useToast();
+
+  const handleDownloadPdf = async () => {
+    try {
+      await generatePdf(result);
+      toast({
+        title: "PDF Downloaded",
+        description: "Your analysis report has been downloaded successfully.",
+      });
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      toast({
+        title: "PDF Generation Failed",
+        description: "Failed to generate PDF. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -53,13 +71,33 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
               <Button 
                 size="sm" 
                 onClick={handleDownloadPdf}
+                disabled={isGenerating}
                 className="gap-2"
               >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Download PDF</span>
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">{progress}%</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Download PDF</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
+          
+          {/* PDF Generation Progress */}
+          {isGenerating && (
+            <div className="mt-3">
+              <Progress value={progress} className="h-2" />
+              <p className="text-xs text-muted-foreground mt-1 text-center">
+                Generating PDF with all 100 questions... {progress}%
+              </p>
+            </div>
+          )}
         </div>
       </header>
 
