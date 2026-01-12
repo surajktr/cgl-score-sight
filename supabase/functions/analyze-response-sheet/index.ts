@@ -57,17 +57,52 @@ const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
   D: 'English Comprehension',
 };
 
-// Parse candidate info from the HTML - SSC format uses ":&nbsp;&nbsp;&nbsp;" prefix
+// Map URL suffix to part
+const PART_URL_MAP: Record<string, 'A' | 'B' | 'C' | 'D'> = {
+  'ViewCandResponse.aspx': 'A',
+  'ViewCandResponse1.aspx': 'B',
+  'ViewCandResponse3.aspx': 'C',
+  'ViewCandResponse4.aspx': 'D',
+};
+
+// Generate URLs for all 4 parts from a given URL
+function generatePartUrls(inputUrl: string): { part: 'A' | 'B' | 'C' | 'D'; url: string }[] {
+  const parts: { part: 'A' | 'B' | 'C' | 'D'; url: string }[] = [];
+  
+  // Extract base URL and query params
+  const urlParts = inputUrl.split('?');
+  const queryString = urlParts[1] || '';
+  const basePath = urlParts[0];
+  
+  // Find the base directory
+  const lastSlashIndex = basePath.lastIndexOf('/');
+  const baseDir = basePath.substring(0, lastSlashIndex + 1);
+  
+  // Generate all 4 part URLs
+  const partFiles = [
+    { file: 'ViewCandResponse.aspx', part: 'A' as const },
+    { file: 'ViewCandResponse1.aspx', part: 'B' as const },
+    { file: 'ViewCandResponse3.aspx', part: 'C' as const },
+    { file: 'ViewCandResponse4.aspx', part: 'D' as const },
+  ];
+  
+  for (const { file, part } of partFiles) {
+    const url = `${baseDir}${file}${queryString ? '?' + queryString : ''}`;
+    parts.push({ part, url });
+  }
+  
+  return parts;
+}
+
+// Parse candidate info from the HTML
 function parseCandidateInfo(html: string): CandidateInfo {
   const getTableValue = (label: string): string => {
-    // Match pattern: <td>Label</td><td>:&nbsp;&nbsp;&nbsp;Value</td>
     const regex = new RegExp(
       `<td[^>]*>[^<]*${label}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
       'i'
     );
     const match = html.match(regex);
     if (match) {
-      // Clean up the value - remove &nbsp; and extra whitespace
       return match[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
     }
     return '';
@@ -83,12 +118,16 @@ function parseCandidateInfo(html: string): CandidateInfo {
   };
 }
 
-// Parse questions from HTML - SSC uses bgcolor attributes on TR/TD elements
-function parseQuestions(html: string): QuestionData[] {
+// Parse questions from HTML for a specific part
+function parseQuestionsForPart(html: string, part: 'A' | 'B' | 'C' | 'D', baseUrl: string): QuestionData[] {
   const questions: QuestionData[] = [];
   
-  // Find all question tables - each question is in its own table with Q.No: X format
-  // Pattern: table containing "Q.No: X" followed by option rows
+  // Extract base URL for resolving relative image paths
+  const urlParts = baseUrl.split('?')[0];
+  const lastSlashIndex = urlParts.lastIndexOf('/');
+  const baseDir = urlParts.substring(0, lastSlashIndex + 1);
+  
+  // Find all question tables
   const questionTablePattern = /<table[^>]*>[\s\S]*?Q\.No:\s*&nbsp;(\d+)[\s\S]*?<\/table>/gi;
   let tableMatch;
   
@@ -96,23 +135,20 @@ function parseQuestions(html: string): QuestionData[] {
     const qNum = parseInt(tableMatch[1]);
     const tableContent = tableMatch[0];
     
-    // Determine part based on question number (25 questions per part)
-    const partIndex = Math.floor((qNum - 1) / 25);
-    const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
-    const part = parts[Math.min(partIndex, 3)];
-    
-    // Find question image (first img in the question row)
+    // Find question image
     const qImgPattern = /Q\.No:\s*&nbsp;\d+<\/font><\/td><td[^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i;
     const qImgMatch = tableContent.match(qImgPattern);
-    const questionImageUrl = qImgMatch ? qImgMatch[1] : '';
+    let questionImageUrl = qImgMatch ? qImgMatch[1] : '';
     
-    // Parse options - each option is in a <tr> with possible bgcolor
-    // Look for rows containing option images (after the question row)
+    // Make image URL absolute
+    if (questionImageUrl && !questionImageUrl.startsWith('http')) {
+      questionImageUrl = baseDir + questionImageUrl;
+    }
+    
+    // Parse options
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
     
-    // Pattern to match option rows: <tr ...bgcolor="color"...> or <tr>...<td...bgcolor="color">
-    // containing an image
     const optionRowPattern = /<tr[^>]*(?:bgcolor\s*=\s*["']([^"']+)["'])?[^>]*>([\s\S]*?)<\/tr>/gi;
     let optionMatch;
     let optIdx = 0;
@@ -122,20 +158,16 @@ function parseQuestions(html: string): QuestionData[] {
       const rowBgcolor = (optionMatch[1] || '').toLowerCase();
       const rowContent = optionMatch[2];
       
-      // Skip the question row (contains Q.No:)
       if (rowContent.includes('Q.No:')) {
         foundQuestionRow = true;
         continue;
       }
       
-      // Only process rows after the question row
       if (!foundQuestionRow) continue;
       
-      // Check if this row contains an option image
       const imgMatch = rowContent.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
       if (!imgMatch) continue;
       
-      // Check for bgcolor in the row or in any td within the row
       let bgcolor = rowBgcolor;
       if (!bgcolor) {
         const tdBgMatch = rowContent.match(/bgcolor\s*=\s*["']([^"']+)["']/i);
@@ -144,22 +176,21 @@ function parseQuestions(html: string): QuestionData[] {
         }
       }
       
-      // Determine status based on bgcolor:
-      // green = correct answer selected by candidate (correct)
-      // red = wrong answer selected by candidate
-      // yellow = correct answer (shown when candidate selected wrong)
       const isGreen = bgcolor.includes('green');
       const isRed = bgcolor.includes('red');
       const isYellow = bgcolor.includes('yellow');
       
-      // isCorrect = this option is the correct answer
       const isCorrect = isGreen || isYellow;
-      // isSelected = candidate selected this option
       const isSelected = isGreen || isRed;
+      
+      let optionImageUrl = imgMatch[1];
+      if (optionImageUrl && !optionImageUrl.startsWith('http')) {
+        optionImageUrl = baseDir + optionImageUrl;
+      }
       
       options.push({
         id: optionIds[optIdx],
-        imageUrl: imgMatch[1],
+        imageUrl: optionImageUrl,
         isSelected,
         isCorrect,
       });
@@ -167,9 +198,7 @@ function parseQuestions(html: string): QuestionData[] {
       optIdx++;
     }
     
-    // If we found at least some options, add the question
     if (options.length >= 2) {
-      // Pad to 4 options if needed
       while (options.length < 4) {
         options.push({
           id: optionIds[options.length],
@@ -179,7 +208,6 @@ function parseQuestions(html: string): QuestionData[] {
         });
       }
       
-      // Determine question status
       let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
       const hasSelected = options.some(o => o.isSelected);
       const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
@@ -192,11 +220,14 @@ function parseQuestions(html: string): QuestionData[] {
         status = 'wrong';
       }
       
-      // Calculate marks (SSC CGL: +2 for correct, -0.5 for wrong)
       const marksAwarded = status === 'correct' ? 2 : status === 'wrong' ? -0.5 : 0;
       
+      // Calculate the actual question number based on part (25 questions per part)
+      const partOffset = { A: 0, B: 25, C: 50, D: 75 };
+      const actualQuestionNumber = partOffset[part] + qNum;
+      
       questions.push({
-        questionNumber: qNum,
+        questionNumber: actualQuestionNumber,
         part,
         subject: SUBJECTS[part],
         questionImageUrl,
@@ -205,60 +236,6 @@ function parseQuestions(html: string): QuestionData[] {
         marksAwarded,
       });
     }
-  }
-  
-  // Sort by question number
-  questions.sort((a, b) => a.questionNumber - b.questionNumber);
-  
-  return questions;
-}
-
-// Alternative parsing method using rawHtml patterns
-function parseQuestionsAlternative(html: string): QuestionData[] {
-  const questions: QuestionData[] = [];
-  
-  // Look for answer key table patterns
-  // Format: Question No | Your Answer | Correct Answer
-  const answerKeyPattern = /(\d+)\s*\|\s*([A-D]|-)\s*\|\s*([A-D])/gi;
-  let match;
-  
-  while ((match = answerKeyPattern.exec(html)) !== null) {
-    const qNum = parseInt(match[1]);
-    const yourAnswer = match[2].toUpperCase();
-    const correctAnswer = match[3].toUpperCase();
-    
-    const partIndex = Math.floor((qNum - 1) / 25);
-    const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
-    const part = parts[Math.min(partIndex, 3)];
-    
-    const optionIds = ['A', 'B', 'C', 'D'];
-    const options = optionIds.map(id => ({
-      id,
-      imageUrl: '',
-      isSelected: id === yourAnswer,
-      isCorrect: id === correctAnswer,
-    }));
-    
-    let status: 'correct' | 'wrong' | 'unattempted';
-    if (yourAnswer === '-' || yourAnswer === '') {
-      status = 'unattempted';
-    } else if (yourAnswer === correctAnswer) {
-      status = 'correct';
-    } else {
-      status = 'wrong';
-    }
-    
-    const marksAwarded = status === 'correct' ? 2 : status === 'wrong' ? -0.5 : 0;
-    
-    questions.push({
-      questionNumber: qNum,
-      part,
-      subject: SUBJECTS[part],
-      questionImageUrl: '',
-      options,
-      status,
-      marksAwarded,
-    });
   }
   
   return questions;
@@ -320,61 +297,69 @@ serve(async (req) => {
       );
     }
 
-    console.log('Scraping URL:', url);
+    // Generate URLs for all 4 parts
+    const partUrls = generatePartUrls(url);
+    console.log('Fetching all 4 parts:', partUrls.map(p => p.part).join(', '));
 
-    // Scrape the response sheet URL using Firecrawl
-    const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url,
-        formats: ['html', 'rawHtml'],
-        waitFor: 3000, // Wait for dynamic content
-      }),
+    let allQuestions: QuestionData[] = [];
+    let candidate: CandidateInfo | null = null;
+
+    // Fetch all parts in parallel
+    const fetchPromises = partUrls.map(async ({ part, url: partUrl }) => {
+      console.log(`Scraping Part ${part}:`, partUrl);
+      
+      try {
+        const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: partUrl,
+            formats: ['html', 'rawHtml'],
+            waitFor: 3000,
+          }),
+        });
+
+        const scrapeData = await scrapeResponse.json();
+
+        if (!scrapeResponse.ok || !scrapeData.success) {
+          console.error(`Failed to scrape Part ${part}:`, scrapeData.error);
+          return { part, questions: [], html: '' };
+        }
+
+        const html = scrapeData.data?.html || scrapeData.data?.rawHtml || '';
+        console.log(`Part ${part} HTML length:`, html.length);
+
+        const questions = parseQuestionsForPart(html, part, partUrl);
+        console.log(`Part ${part} questions count:`, questions.length);
+
+        return { part, questions, html };
+      } catch (error) {
+        console.error(`Error scraping Part ${part}:`, error);
+        return { part, questions: [], html: '' };
+      }
     });
 
-    const scrapeData = await scrapeResponse.json();
+    const results = await Promise.all(fetchPromises);
 
-    if (!scrapeResponse.ok || !scrapeData.success) {
-      console.error('Firecrawl API error:', scrapeData);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: scrapeData.error || 'Failed to scrape the response sheet. Please check the URL and try again.' 
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Collect all questions and candidate info
+    for (const result of results) {
+      allQuestions = allQuestions.concat(result.questions);
+      
+      // Parse candidate info from the first successful part
+      if (!candidate && result.html) {
+        candidate = parseCandidateInfo(result.html);
+      }
     }
 
-    const html = scrapeData.data?.html || scrapeData.data?.rawHtml || '';
-    
-    if (!html) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Could not extract content from the URL' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Sort questions by number
+    allQuestions.sort((a, b) => a.questionNumber - b.questionNumber);
 
-    console.log('HTML content length:', html.length);
+    console.log('Total questions parsed:', allQuestions.length);
 
-    // Parse candidate info
-    const candidate = parseCandidateInfo(html);
-    
-    // Parse questions - try primary method first, then alternative
-    let questions = parseQuestions(html);
-    
-    if (questions.length === 0) {
-      console.log('Trying alternative parsing method...');
-      questions = parseQuestionsAlternative(html);
-    }
-    
-    console.log('Parsed questions count:', questions.length);
-
-    if (questions.length === 0) {
-      // Return a helpful error if we couldn't parse any questions
+    if (allQuestions.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -384,31 +369,43 @@ serve(async (req) => {
       );
     }
 
+    // Use default candidate if parsing failed
+    if (!candidate || !candidate.rollNumber) {
+      candidate = {
+        rollNumber: '',
+        name: '',
+        examLevel: 'SSC CGL Tier 1',
+        testDate: '',
+        shift: '',
+        centreName: '',
+      };
+    }
+
     // Calculate sections
-    const sections = calculateSections(questions);
+    const sections = calculateSections(allQuestions);
     
     // Calculate totals
-    const correctCount = questions.filter(q => q.status === 'correct').length;
-    const wrongCount = questions.filter(q => q.status === 'wrong').length;
-    const unattemptedCount = questions.filter(q => q.status === 'unattempted').length;
+    const correctCount = allQuestions.filter(q => q.status === 'correct').length;
+    const wrongCount = allQuestions.filter(q => q.status === 'wrong').length;
+    const unattemptedCount = allQuestions.filter(q => q.status === 'unattempted').length;
     const totalScore = correctCount * 2 - wrongCount * 0.5;
     
-    const result: AnalysisResult = {
+    const analysisResult: AnalysisResult = {
       candidate,
       totalScore,
-      maxScore: questions.length * 2,
-      totalQuestions: questions.length,
+      maxScore: allQuestions.length * 2,
+      totalQuestions: allQuestions.length,
       correctCount,
       wrongCount,
       unattemptedCount,
       sections,
-      questions,
+      questions: allQuestions,
     };
 
-    console.log('Analysis complete. Total score:', totalScore);
+    console.log('Analysis complete. Total score:', totalScore, '/', allQuestions.length * 2);
 
     return new Response(
-      JSON.stringify({ success: true, data: result }),
+      JSON.stringify({ success: true, data: analysisResult }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
