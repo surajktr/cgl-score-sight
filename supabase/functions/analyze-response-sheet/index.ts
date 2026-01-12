@@ -323,7 +323,7 @@ serve(async (req) => {
     console.log('Scraping URL:', url);
 
     // Scrape the response sheet URL using Firecrawl with actions to click all 4 parts
-    // The SSC CGL response sheet has 4 tabs (Part A, B, C, D) that need to be clicked
+    // The SSC CGL response sheet has buttons like "Click Here for PART-A"
     const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -333,20 +333,17 @@ serve(async (req) => {
       body: JSON.stringify({
         url,
         formats: ['html', 'rawHtml'],
-        waitFor: 2000, // Initial wait for page load
+        waitFor: 3000, // Wait for initial page load
         actions: [
-          // Click Part A (usually already visible, but click to ensure)
-          { type: 'click', selector: 'input[value*="PART-A"], input[value*="Part-A"], input[value*="PART A"], a:contains("PART-A"), button:contains("PART-A")' },
-          { type: 'wait', milliseconds: 1500 },
-          // Click Part B
-          { type: 'click', selector: 'input[value*="PART-B"], input[value*="Part-B"], input[value*="PART B"], a:contains("PART-B"), button:contains("PART-B")' },
-          { type: 'wait', milliseconds: 1500 },
-          // Click Part C
-          { type: 'click', selector: 'input[value*="PART-C"], input[value*="Part-C"], input[value*="PART C"], a:contains("PART-C"), button:contains("PART-C")' },
-          { type: 'wait', milliseconds: 1500 },
-          // Click Part D
-          { type: 'click', selector: 'input[value*="PART-D"], input[value*="Part-D"], input[value*="PART D"], a:contains("PART-D"), button:contains("PART-D")' },
-          { type: 'wait', milliseconds: 1500 },
+          // Click each part button - using value attribute matching "Click Here for PART-X"
+          { type: 'click', selector: 'input[value*="PART-A"]' },
+          { type: 'wait', milliseconds: 2000 },
+          { type: 'click', selector: 'input[value*="PART-B"]' },
+          { type: 'wait', milliseconds: 2000 },
+          { type: 'click', selector: 'input[value*="PART-C"]' },
+          { type: 'wait', milliseconds: 2000 },
+          { type: 'click', selector: 'input[value*="PART-D"]' },
+          { type: 'wait', milliseconds: 2000 },
         ],
       }),
     });
