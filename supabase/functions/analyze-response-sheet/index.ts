@@ -322,8 +322,7 @@ serve(async (req) => {
 
     console.log('Scraping URL:', url);
 
-    // Scrape the response sheet URL using Firecrawl with actions to click all 4 parts
-    // The SSC CGL response sheet has buttons like "Click Here for PART-A"
+    // Scrape the response sheet URL using Firecrawl
     const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -333,18 +332,7 @@ serve(async (req) => {
       body: JSON.stringify({
         url,
         formats: ['html', 'rawHtml'],
-        waitFor: 3000, // Wait for initial page load
-        actions: [
-          // Click each part button - using value attribute matching "Click Here for PART-X"
-          { type: 'click', selector: 'input[value*="PART-A"]' },
-          { type: 'wait', milliseconds: 2000 },
-          { type: 'click', selector: 'input[value*="PART-B"]' },
-          { type: 'wait', milliseconds: 2000 },
-          { type: 'click', selector: 'input[value*="PART-C"]' },
-          { type: 'wait', milliseconds: 2000 },
-          { type: 'click', selector: 'input[value*="PART-D"]' },
-          { type: 'wait', milliseconds: 2000 },
-        ],
+        waitFor: 3000, // Wait for dynamic content
       }),
     });
 
