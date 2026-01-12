@@ -57,72 +57,109 @@ const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
   D: 'English Comprehension',
 };
 
-// Parse candidate info from the HTML
+// Parse candidate info from the HTML - SSC format uses ":&nbsp;&nbsp;&nbsp;" prefix
 function parseCandidateInfo(html: string): CandidateInfo {
   const getTableValue = (label: string): string => {
-    const regex = new RegExp(`<td[^>]*>\\s*${label}\\s*<\\/td>\\s*<td[^>]*>([^<]+)<\\/td>`, 'i');
+    // Match pattern: <td>Label</td><td>:&nbsp;&nbsp;&nbsp;Value</td>
+    const regex = new RegExp(
+      `<td[^>]*>[^<]*${label}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+      'i'
+    );
     const match = html.match(regex);
-    return match ? match[1].trim() : '';
+    if (match) {
+      // Clean up the value - remove &nbsp; and extra whitespace
+      return match[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    return '';
   };
 
   return {
-    rollNumber: getTableValue('Roll Number') || getTableValue('Registration Number') || '',
+    rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
     name: getTableValue('Candidate Name') || getTableValue('Name') || '',
-    examLevel: getTableValue('Exam Name') || getTableValue('Exam Level') || 'Tier-I',
-    testDate: getTableValue('Test Date') || getTableValue('Exam Date') || '',
-    shift: getTableValue('Shift') || getTableValue('Batch') || '',
-    centreName: getTableValue('Centre Name') || getTableValue('Test Centre') || '',
+    examLevel: getTableValue('Exam Level') || 'SSC CGL Tier 1',
+    testDate: getTableValue('Test Date') || '',
+    shift: getTableValue('Test Time') || getTableValue('Shift') || '',
+    centreName: getTableValue('Centre Name') || getTableValue('Center Name') || '',
   };
 }
 
-// Parse questions from HTML - SSC uses bgcolor attributes to indicate status
+// Parse questions from HTML - SSC uses bgcolor attributes on TR/TD elements
 function parseQuestions(html: string): QuestionData[] {
   const questions: QuestionData[] = [];
   
-  // Find all question blocks - SSC format uses table rows with question data
-  // Looking for patterns like: Q.1, Q.2, etc. with option tables
+  // Find all question tables - each question is in its own table with Q.No: X format
+  // Pattern: table containing "Q.No: X" followed by option rows
+  const questionTablePattern = /<table[^>]*>[\s\S]*?Q\.No:\s*&nbsp;(\d+)[\s\S]*?<\/table>/gi;
+  let tableMatch;
   
-  // Match question sections - each question has a number and options
-  const questionPattern = /Q\.?\s*(\d+)\s*[\s\S]*?<table[^>]*>([\s\S]*?)<\/table>/gi;
-  let match;
-  
-  while ((match = questionPattern.exec(html)) !== null) {
-    const qNum = parseInt(match[1]);
-    const tableContent = match[2];
+  while ((tableMatch = questionTablePattern.exec(html)) !== null) {
+    const qNum = parseInt(tableMatch[1]);
+    const tableContent = tableMatch[0];
     
     // Determine part based on question number (25 questions per part)
     const partIndex = Math.floor((qNum - 1) / 25);
     const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
     const part = parts[Math.min(partIndex, 3)];
     
-    // Parse options - look for bgcolor attributes to determine status
-    // Green/correct: bgcolor containing "green" or specific hex codes
-    // Red/wrong: bgcolor containing "red" 
-    // Selected: bgcolor or different styling
+    // Find question image (first img in the question row)
+    const qImgPattern = /Q\.No:\s*&nbsp;\d+<\/font><\/td><td[^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i;
+    const qImgMatch = tableContent.match(qImgPattern);
+    const questionImageUrl = qImgMatch ? qImgMatch[1] : '';
     
+    // Parse options - each option is in a <tr> with possible bgcolor
+    // Look for rows containing option images (after the question row)
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
     
-    // Find option cells - they typically have images
-    const optionPattern = /<td[^>]*(?:bgcolor\s*=\s*["']([^"']+)["'])?[^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>[\s\S]*?<\/td>/gi;
+    // Pattern to match option rows: <tr ...bgcolor="color"...> or <tr>...<td...bgcolor="color">
+    // containing an image
+    const optionRowPattern = /<tr[^>]*(?:bgcolor\s*=\s*["']([^"']+)["'])?[^>]*>([\s\S]*?)<\/tr>/gi;
     let optionMatch;
     let optIdx = 0;
+    let foundQuestionRow = false;
     
-    while ((optionMatch = optionPattern.exec(tableContent)) !== null && optIdx < 4) {
-      const bgcolor = (optionMatch[1] || '').toLowerCase();
-      const imgSrc = optionMatch[2];
+    while ((optionMatch = optionRowPattern.exec(tableContent)) !== null && optIdx < 4) {
+      const rowBgcolor = (optionMatch[1] || '').toLowerCase();
+      const rowContent = optionMatch[2];
       
-      // Determine if this option is selected or correct based on bgcolor
-      // Common SSC patterns:
-      // Green = correct answer
-      // Red = wrong selected answer
-      // Light blue/highlighted = selected
-      const isCorrect = bgcolor.includes('green') || bgcolor.includes('#90ee90') || bgcolor.includes('#00ff00');
-      const isSelected = isCorrect || bgcolor.includes('red') || bgcolor.includes('#ff') || bgcolor.includes('lightblue') || bgcolor.includes('#add8e6');
+      // Skip the question row (contains Q.No:)
+      if (rowContent.includes('Q.No:')) {
+        foundQuestionRow = true;
+        continue;
+      }
+      
+      // Only process rows after the question row
+      if (!foundQuestionRow) continue;
+      
+      // Check if this row contains an option image
+      const imgMatch = rowContent.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+      if (!imgMatch) continue;
+      
+      // Check for bgcolor in the row or in any td within the row
+      let bgcolor = rowBgcolor;
+      if (!bgcolor) {
+        const tdBgMatch = rowContent.match(/bgcolor\s*=\s*["']([^"']+)["']/i);
+        if (tdBgMatch) {
+          bgcolor = tdBgMatch[1].toLowerCase();
+        }
+      }
+      
+      // Determine status based on bgcolor:
+      // green = correct answer selected by candidate (correct)
+      // red = wrong answer selected by candidate
+      // yellow = correct answer (shown when candidate selected wrong)
+      const isGreen = bgcolor.includes('green');
+      const isRed = bgcolor.includes('red');
+      const isYellow = bgcolor.includes('yellow');
+      
+      // isCorrect = this option is the correct answer
+      const isCorrect = isGreen || isYellow;
+      // isSelected = candidate selected this option
+      const isSelected = isGreen || isRed;
       
       options.push({
         id: optionIds[optIdx],
-        imageUrl: imgSrc,
+        imageUrl: imgMatch[1],
         isSelected,
         isCorrect,
       });
@@ -130,55 +167,44 @@ function parseQuestions(html: string): QuestionData[] {
       optIdx++;
     }
     
-    // If we didn't find enough options, try alternative parsing
-    if (options.length < 4) {
-      // Alternative: look for img tags with option identifiers
-      const altOptionPattern = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
-      let altMatch;
-      options.length = 0;
-      optIdx = 0;
-      
-      while ((altMatch = altOptionPattern.exec(tableContent)) !== null && optIdx < 4) {
+    // If we found at least some options, add the question
+    if (options.length >= 2) {
+      // Pad to 4 options if needed
+      while (options.length < 4) {
         options.push({
-          id: optionIds[optIdx],
-          imageUrl: altMatch[1],
+          id: optionIds[options.length],
+          imageUrl: '',
           isSelected: false,
           isCorrect: false,
         });
-        optIdx++;
       }
+      
+      // Determine question status
+      let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
+      const hasSelected = options.some(o => o.isSelected);
+      const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
+      
+      if (!hasSelected) {
+        status = 'unattempted';
+      } else if (selectedIsCorrect) {
+        status = 'correct';
+      } else {
+        status = 'wrong';
+      }
+      
+      // Calculate marks (SSC CGL: +2 for correct, -0.5 for wrong)
+      const marksAwarded = status === 'correct' ? 2 : status === 'wrong' ? -0.5 : 0;
+      
+      questions.push({
+        questionNumber: qNum,
+        part,
+        subject: SUBJECTS[part],
+        questionImageUrl,
+        options,
+        status,
+        marksAwarded,
+      });
     }
-    
-    // Determine question status
-    let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
-    const hasSelected = options.some(o => o.isSelected);
-    const selectedCorrect = options.some(o => o.isSelected && o.isCorrect);
-    
-    if (!hasSelected) {
-      status = 'unattempted';
-    } else if (selectedCorrect) {
-      status = 'correct';
-    } else {
-      status = 'wrong';
-    }
-    
-    // Calculate marks (SSC CGL: +2 for correct, -0.5 for wrong)
-    const marksAwarded = status === 'correct' ? 2 : status === 'wrong' ? -0.5 : 0;
-    
-    // Find question image
-    const qImgPattern = new RegExp(`Q\\.?\\s*${qNum}[\\s\\S]*?<img[^>]+src\\s*=\\s*["']([^"']+)["']`, 'i');
-    const qImgMatch = html.match(qImgPattern);
-    const questionImageUrl = qImgMatch ? qImgMatch[1] : '';
-    
-    questions.push({
-      questionNumber: qNum,
-      part,
-      subject: SUBJECTS[part],
-      questionImageUrl,
-      options,
-      status,
-      marksAwarded,
-    });
   }
   
   // Sort by question number
