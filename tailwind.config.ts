@@ -57,28 +57,52 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Custom answer state colors
+        correct: {
+          DEFAULT: "hsl(var(--correct))",
+          bg: "hsl(var(--correct-bg))",
+        },
+        wrong: {
+          DEFAULT: "hsl(var(--wrong))",
+          bg: "hsl(var(--wrong-bg))",
+        },
+        unattempted: {
+          DEFAULT: "hsl(var(--unattempted))",
+          bg: "hsl(var(--unattempted-bg))",
+        },
+        "right-answer": {
+          DEFAULT: "hsl(var(--right-answer))",
+          bg: "hsl(var(--right-answer-bg))",
+        },
+        score: {
+          positive: "hsl(var(--score-positive))",
+          negative: "hsl(var(--score-negative))",
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        'sm': 'var(--shadow-sm)',
+        'md': 'var(--shadow-md)',
+        'lg': 'var(--shadow-lg)',
+        'xl': 'var(--shadow-xl)',
+        'card': 'var(--shadow-card)',
+      },
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
         },
       },
       animation: {
