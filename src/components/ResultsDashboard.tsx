@@ -120,7 +120,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
           <SectionBreakdown sections={result.sections} />
 
           {/* Questions Table */}
-          <QuestionsTable questions={result.questions} />
+          <QuestionsTable questions={result.questions} result={result} />
         </div>
       </main>
     </div>
