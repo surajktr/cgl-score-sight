@@ -82,7 +82,7 @@ function generatePartUrls(inputUrl: string): { part: 'A' | 'B' | 'C' | 'D'; url:
   // Correct URL patterns for all 4 parts
   const partFiles = [
     { file: 'ViewCandResponse.aspx', part: 'A' as const },   // Part A
-    { file: 'ViewCandResponse1.aspx', part: 'B' as const },  // Part B  
+    { file: 'ViewCandResponse2.aspx', part: 'B' as const },  // Part B  
     { file: 'ViewCandResponse3.aspx', part: 'C' as const },  // Part C
     { file: 'ViewCandResponse4.aspx', part: 'D' as const },  // Part D
   ];
