@@ -30,88 +30,74 @@ export const QuestionCard = ({ question }: QuestionCardProps) => {
 
   const getOptionClass = (option: QuestionData['options'][0]) => {
     if (option.isSelected && option.isCorrect) {
-      return 'border-2 border-correct bg-correct-bg';
+      return 'bg-correct-bg/50';
     }
     if (option.isSelected && !option.isCorrect) {
-      return 'border-2 border-wrong bg-wrong-bg';
+      return 'bg-wrong-bg/50';
     }
     if (!option.isSelected && option.isCorrect && question.status === 'wrong') {
-      return 'border-2 border-right-answer bg-right-answer-bg';
+      return 'bg-right-answer-bg/50';
     }
     if (!option.isSelected && option.isCorrect && question.status === 'unattempted') {
-      return 'border-2 border-right-answer bg-right-answer-bg';
+      return 'bg-right-answer-bg/50';
     }
-    return 'border border-border bg-muted/30';
+    return '';
+  };
+
+  const getOptionLabelClass = (option: QuestionData['options'][0]) => {
+    if (option.isSelected && option.isCorrect) {
+      return 'bg-correct text-white';
+    }
+    if (option.isSelected && !option.isCorrect) {
+      return 'bg-wrong text-white';
+    }
+    if (!option.isSelected && option.isCorrect && question.status !== 'correct') {
+      return 'bg-right-answer text-white';
+    }
+    return 'bg-muted text-foreground';
   };
 
   return (
-    <div className="card-elevated p-4 hover:shadow-md transition-shadow">
+    <div className="py-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            {question.questionNumber}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-primary">
+            Q.{question.questionNumber}
           </span>
-          <span className="text-xs text-muted-foreground">
-            Part {question.part} • {question.subject}
-          </span>
+          {getStatusBadge()}
         </div>
-        {getStatusBadge()}
       </div>
 
       {/* Question Image */}
-      <div className="mb-4 rounded-lg overflow-hidden border border-border bg-white">
+      <div className="mb-3">
         <img 
           src={question.questionImageUrl} 
           alt={`Question ${question.questionNumber}`}
-          className="w-full h-auto"
+          className="max-w-full h-auto"
           loading="lazy"
         />
       </div>
 
-      {/* Options */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Options - Vertical Layout */}
+      <div className="space-y-2">
         {question.options.map((option) => (
           <div 
             key={option.id}
-            className={`relative rounded-lg overflow-hidden p-2 ${getOptionClass(option)}`}
+            className={`flex items-center gap-3 py-1 px-2 rounded ${getOptionClass(option)}`}
           >
-            <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-background border border-border flex items-center justify-center">
-              <span className="text-xs font-medium text-foreground">{option.id}</span>
-            </div>
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${getOptionLabelClass(option)}`}>
+              {option.id}
+            </span>
             <img 
               src={option.imageUrl}
               alt={`Option ${option.id}`}
-              className="w-full h-auto rounded"
+              className="max-h-10 h-auto"
               loading="lazy"
             />
           </div>
         ))}
       </div>
-
-      {/* Legend for wrong answers */}
-      {question.status !== 'correct' && (
-        <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground">
-          {question.status === 'wrong' && (
-            <>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded border-2 border-wrong bg-wrong-bg"></span>
-                Your answer
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded border-2 border-right-answer bg-right-answer-bg"></span>
-                Correct answer
-              </span>
-            </>
-          )}
-          {question.status === 'unattempted' && (
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded border-2 border-right-answer bg-right-answer-bg"></span>
-              Correct answer
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 };

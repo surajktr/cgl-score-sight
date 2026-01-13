@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { QuestionCard } from './QuestionCard';
-import type { QuestionData } from '@/lib/mockData';
-import { FileText, Filter } from 'lucide-react';
+import type { AnalysisResult, QuestionData } from '@/lib/mockData';
+import { FileText, Filter, Download, Loader2 } from 'lucide-react';
+import { useHtmlGenerator } from '@/hooks/useHtmlGenerator';
+import { useToast } from '@/hooks/use-toast';
 
 interface QuestionsTableProps {
   questions: QuestionData[];
+  result?: AnalysisResult;
 }
 
 type FilterType = 'all' | 'A' | 'B' | 'C' | 'D';
@@ -19,9 +23,11 @@ const partLabels: Record<string, string> = {
   D: 'Part D - English',
 };
 
-export const QuestionsTable = ({ questions }: QuestionsTableProps) => {
+export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
   const [partFilter, setPartFilter] = useState<FilterType>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const { generateHtml, isGenerating } = useHtmlGenerator();
+  const { toast } = useToast();
 
   const filteredQuestions = questions.filter((q) => {
     const partMatch = partFilter === 'all' || q.part === partFilter;
@@ -37,6 +43,24 @@ export const QuestionsTable = ({ questions }: QuestionsTableProps) => {
     }).length;
   };
 
+  const handleDownloadHtml = async () => {
+    if (!result) return;
+    try {
+      await generateHtml(result);
+      toast({
+        title: "HTML Downloaded",
+        description: "Your complete question sheet has been downloaded.",
+      });
+    } catch (error) {
+      console.error('HTML generation failed:', error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to generate HTML file. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="card-elevated p-6 animate-fade-in" style={{ animationDelay: '0.3s' }}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -45,18 +69,37 @@ export const QuestionsTable = ({ questions }: QuestionsTableProps) => {
           Question Analysis
         </h2>
         
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary"
-          >
-            <option value="all">All Status ({getStatusCount('all', partFilter)})</option>
-            <option value="correct">Correct ({getStatusCount('correct', partFilter)})</option>
-            <option value="wrong">Wrong ({getStatusCount('wrong', partFilter)})</option>
-            <option value="unattempted">Skipped ({getStatusCount('unattempted', partFilter)})</option>
-          </select>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="text-sm border border-border rounded-lg px-3 py-1.5 bg-background focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="all">All Status ({getStatusCount('all', partFilter)})</option>
+              <option value="correct">Correct ({getStatusCount('correct', partFilter)})</option>
+              <option value="wrong">Wrong ({getStatusCount('wrong', partFilter)})</option>
+              <option value="unattempted">Skipped ({getStatusCount('unattempted', partFilter)})</option>
+            </select>
+          </div>
+          
+          {result && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadHtml}
+              disabled={isGenerating}
+              className="gap-2"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Download HTML</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -83,7 +126,7 @@ export const QuestionsTable = ({ questions }: QuestionsTableProps) => {
               <p>No questions match the selected filters</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="divide-y divide-border">
               {filteredQuestions.map((question) => (
                 <QuestionCard key={question.questionNumber} question={question} />
               ))}
