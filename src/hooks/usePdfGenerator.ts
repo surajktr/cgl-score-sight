@@ -2,17 +2,38 @@ import { useState, useCallback } from 'react';
 import jsPDF from 'jspdf';
 import type { AnalysisResult, QuestionData } from '@/lib/mockData';
 
+const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
+  A: 'General Intelligence & Reasoning',
+  B: 'General Awareness',
+  C: 'Quantitative Aptitude',
+  D: 'English Comprehension',
+};
+
 export const usePdfGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+  // Load image and get dimensions
+  const loadImage = async (url: string): Promise<{ data: string; width: number; height: number } | null> => {
     try {
       const response = await fetch(url);
+      if (!response.ok) return null;
+      
       const blob = await response.blob();
       return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
+        reader.onloadend = () => {
+          const img = new Image();
+          img.onload = () => {
+            resolve({
+              data: reader.result as string,
+              width: img.width,
+              height: img.height,
+            });
+          };
+          img.onerror = () => resolve(null);
+          img.src = reader.result as string;
+        };
         reader.onerror = () => resolve(null);
         reader.readAsDataURL(blob);
       });
@@ -34,7 +55,7 @@ export const usePdfGenerator = () => {
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 15;
+      const margin = 12;
       const contentWidth = pageWidth - 2 * margin;
       let yPos = margin;
 
@@ -49,134 +70,137 @@ export const usePdfGenerator = () => {
       };
 
       // ============ HEADER SECTION ============
-      pdf.setFillColor(59, 130, 246); // Primary blue
-      pdf.rect(0, 0, pageWidth, 35, 'F');
+      pdf.setFillColor(59, 130, 246);
+      pdf.rect(0, 0, pageWidth, 30, 'F');
       
       pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(18);
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('SSC CGL Tier-I Response Sheet Analysis', pageWidth / 2, 15, { align: 'center' });
+      pdf.text('SSC CGL Tier-I Response Sheet Analysis', pageWidth / 2, 12, { align: 'center' });
       
-      pdf.setFontSize(11);
+      pdf.setFontSize(10);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(`Generated on ${new Date().toLocaleDateString('en-IN', { 
+      pdf.text(`Generated: ${new Date().toLocaleDateString('en-IN', { 
         day: '2-digit', 
         month: 'long', 
         year: 'numeric' 
-      })}`, pageWidth / 2, 25, { align: 'center' });
+      })}`, pageWidth / 2, 22, { align: 'center' });
       
-      yPos = 45;
+      yPos = 38;
 
       // ============ CANDIDATE INFO ============
       pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(14);
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
       pdf.text('Candidate Information', margin, yPos);
-      yPos += 8;
+      yPos += 6;
 
       pdf.setFillColor(248, 250, 252);
-      pdf.roundedRect(margin, yPos, contentWidth, 35, 3, 3, 'F');
+      pdf.roundedRect(margin, yPos, contentWidth, 28, 2, 2, 'F');
       
-      pdf.setFontSize(10);
+      pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(100, 100, 100);
       
-      const infoY = yPos + 8;
-      const col1X = margin + 5;
+      const infoY = yPos + 6;
+      const col1X = margin + 4;
       const col2X = margin + contentWidth / 2;
       
       pdf.text('Name:', col1X, infoY);
-      pdf.text('Roll Number:', col1X, infoY + 8);
-      pdf.text('Test Date:', col1X, infoY + 16);
+      pdf.text('Roll Number:', col1X, infoY + 7);
+      pdf.text('Test Date:', col1X, infoY + 14);
       
       pdf.text('Exam Level:', col2X, infoY);
-      pdf.text('Shift:', col2X, infoY + 8);
-      pdf.text('Centre:', col2X, infoY + 16);
+      pdf.text('Shift:', col2X, infoY + 7);
+      pdf.text('Centre:', col2X, infoY + 14);
       
       pdf.setTextColor(0, 0, 0);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(result.candidate.name || 'N/A', col1X + 25, infoY);
-      pdf.text(result.candidate.rollNumber || 'N/A', col1X + 25, infoY + 8);
-      pdf.text(result.candidate.testDate || 'N/A', col1X + 25, infoY + 16);
+      pdf.text(result.candidate.name || 'N/A', col1X + 22, infoY);
+      pdf.text(result.candidate.rollNumber || 'N/A', col1X + 22, infoY + 7);
+      pdf.text(result.candidate.testDate || 'N/A', col1X + 22, infoY + 14);
       
-      pdf.text(result.candidate.examLevel || 'SSC CGL Tier 1', col2X + 28, infoY);
-      pdf.text(result.candidate.shift || 'N/A', col2X + 28, infoY + 8);
+      pdf.text(result.candidate.examLevel || 'SSC CGL', col2X + 24, infoY);
+      pdf.text(result.candidate.shift || 'N/A', col2X + 24, infoY + 7);
       const centreName = result.candidate.centreName || 'N/A';
-      pdf.text(centreName.length > 30 ? centreName.substring(0, 30) + '...' : centreName, col2X + 28, infoY + 16);
+      pdf.text(centreName.length > 25 ? centreName.substring(0, 25) + '...' : centreName, col2X + 24, infoY + 14);
       
-      yPos += 45;
+      yPos += 36;
 
       // ============ SCORE SUMMARY ============
       pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(14);
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
       pdf.text('Score Summary', margin, yPos);
-      yPos += 8;
+      yPos += 6;
 
-      // Score box
-      const scoreBoxWidth = contentWidth / 3 - 5;
+      const scoreBoxWidth = contentWidth / 4 - 4;
       
       // Total Score
       pdf.setFillColor(59, 130, 246);
-      pdf.roundedRect(margin, yPos, scoreBoxWidth, 30, 3, 3, 'F');
+      pdf.roundedRect(margin, yPos, scoreBoxWidth, 24, 2, 2, 'F');
       pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(20);
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`${result.totalScore}/${result.maxScore}`, margin + scoreBoxWidth / 2, yPos + 15, { align: 'center' });
-      pdf.setFontSize(9);
+      pdf.text(`${result.totalScore}`, margin + scoreBoxWidth / 2, yPos + 11, { align: 'center' });
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Total Score', margin + scoreBoxWidth / 2, yPos + 24, { align: 'center' });
+      pdf.text(`/ ${result.maxScore}`, margin + scoreBoxWidth / 2, yPos + 18, { align: 'center' });
       
       // Correct
       pdf.setFillColor(34, 197, 94);
-      pdf.roundedRect(margin + scoreBoxWidth + 5, yPos, scoreBoxWidth, 30, 3, 3, 'F');
-      pdf.setFontSize(20);
+      pdf.roundedRect(margin + scoreBoxWidth + 4, yPos, scoreBoxWidth, 24, 2, 2, 'F');
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`${result.correctCount}`, margin + scoreBoxWidth + 5 + scoreBoxWidth / 2, yPos + 15, { align: 'center' });
-      pdf.setFontSize(9);
+      pdf.text(`${result.correctCount}`, margin + scoreBoxWidth + 4 + scoreBoxWidth / 2, yPos + 11, { align: 'center' });
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Correct (+2.0)', margin + scoreBoxWidth + 5 + scoreBoxWidth / 2, yPos + 24, { align: 'center' });
+      pdf.text('Correct', margin + scoreBoxWidth + 4 + scoreBoxWidth / 2, yPos + 18, { align: 'center' });
       
       // Wrong
       pdf.setFillColor(239, 68, 68);
-      pdf.roundedRect(margin + 2 * (scoreBoxWidth + 5), yPos, scoreBoxWidth, 30, 3, 3, 'F');
-      pdf.setFontSize(20);
+      pdf.roundedRect(margin + 2 * (scoreBoxWidth + 4), yPos, scoreBoxWidth, 24, 2, 2, 'F');
+      pdf.setFontSize(16);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`${result.wrongCount}`, margin + 2 * (scoreBoxWidth + 5) + scoreBoxWidth / 2, yPos + 15, { align: 'center' });
-      pdf.setFontSize(9);
+      pdf.text(`${result.wrongCount}`, margin + 2 * (scoreBoxWidth + 4) + scoreBoxWidth / 2, yPos + 11, { align: 'center' });
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Wrong (-0.5)', margin + 2 * (scoreBoxWidth + 5) + scoreBoxWidth / 2, yPos + 24, { align: 'center' });
+      pdf.text('Wrong', margin + 2 * (scoreBoxWidth + 4) + scoreBoxWidth / 2, yPos + 18, { align: 'center' });
       
-      yPos += 40;
-
-      // Unattempted info
-      pdf.setTextColor(100, 100, 100);
-      pdf.setFontSize(10);
-      pdf.text(`Unattempted: ${result.unattemptedCount} questions (0 marks)`, margin, yPos);
-      yPos += 10;
+      // Unattempted
+      pdf.setFillColor(156, 163, 175);
+      pdf.roundedRect(margin + 3 * (scoreBoxWidth + 4), yPos, scoreBoxWidth, 24, 2, 2, 'F');
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${result.unattemptedCount}`, margin + 3 * (scoreBoxWidth + 4) + scoreBoxWidth / 2, yPos + 11, { align: 'center' });
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text('Skipped', margin + 3 * (scoreBoxWidth + 4) + scoreBoxWidth / 2, yPos + 18, { align: 'center' });
+      
+      yPos += 32;
 
       // ============ SECTION BREAKDOWN ============
       pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(14);
+      pdf.setFontSize(12);
       pdf.setFont('helvetica', 'bold');
       pdf.text('Section-wise Breakdown', margin, yPos);
-      yPos += 8;
+      yPos += 6;
 
       // Table header
       pdf.setFillColor(59, 130, 246);
-      pdf.rect(margin, yPos, contentWidth, 8, 'F');
+      pdf.rect(margin, yPos, contentWidth, 7, 'F');
       pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(9);
+      pdf.setFontSize(8);
       pdf.setFont('helvetica', 'bold');
       
-      const colWidths = [80, 25, 25, 30, 30];
-      let xPos = margin + 3;
+      const colWidths = [75, 22, 22, 28, 25];
+      let xPos = margin + 2;
       const headers = ['Section', 'Correct', 'Wrong', 'Unattempted', 'Score'];
       headers.forEach((header, i) => {
-        pdf.text(header, xPos, yPos + 5.5);
+        pdf.text(header, xPos, yPos + 5);
         xPos += colWidths[i];
       });
-      yPos += 8;
+      yPos += 7;
 
       // Table rows
       pdf.setTextColor(0, 0, 0);
@@ -184,66 +208,66 @@ export const usePdfGenerator = () => {
       
       result.sections.forEach((section, index) => {
         pdf.setFillColor(index % 2 === 0 ? 248 : 255, index % 2 === 0 ? 250 : 255, index % 2 === 0 ? 252 : 255);
-        pdf.rect(margin, yPos, contentWidth, 7, 'F');
+        pdf.rect(margin, yPos, contentWidth, 6, 'F');
         
-        xPos = margin + 3;
-        pdf.setFontSize(8);
-        pdf.text(`Part ${section.part}: ${section.subject}`, xPos, yPos + 5);
+        xPos = margin + 2;
+        pdf.setFontSize(7);
+        pdf.text(`Part ${section.part}: ${section.subject}`, xPos, yPos + 4);
         xPos += colWidths[0];
         pdf.setTextColor(34, 197, 94);
-        pdf.text(`${section.correct}`, xPos, yPos + 5);
+        pdf.text(`${section.correct}`, xPos, yPos + 4);
         xPos += colWidths[1];
         pdf.setTextColor(239, 68, 68);
-        pdf.text(`${section.wrong}`, xPos, yPos + 5);
+        pdf.text(`${section.wrong}`, xPos, yPos + 4);
         xPos += colWidths[2];
         pdf.setTextColor(100, 100, 100);
-        pdf.text(`${section.unattempted}`, xPos, yPos + 5);
+        pdf.text(`${section.unattempted}`, xPos, yPos + 4);
         xPos += colWidths[3];
         pdf.setTextColor(0, 0, 0);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`${section.score}`, xPos, yPos + 5);
+        pdf.text(`${section.score}`, xPos, yPos + 4);
         pdf.setFont('helvetica', 'normal');
         
-        yPos += 7;
+        yPos += 6;
       });
       
-      yPos += 10;
+      yPos += 8;
 
       // ============ QUESTIONS SECTION ============
       pdf.addPage();
       yPos = margin;
       
       pdf.setTextColor(0, 0, 0);
-      pdf.setFontSize(16);
+      pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
       pdf.text('All 100 Questions with Answers', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 12;
+      yPos += 10;
 
       // Legend
-      pdf.setFontSize(8);
+      pdf.setFontSize(7);
       pdf.setFont('helvetica', 'normal');
       
       pdf.setFillColor(34, 197, 94);
-      pdf.circle(margin + 3, yPos - 1.5, 2, 'F');
+      pdf.circle(margin + 2, yPos - 1, 1.5, 'F');
       pdf.setTextColor(34, 197, 94);
-      pdf.text('Correct (+2.0)', margin + 8, yPos);
+      pdf.text('Correct (+2.0)', margin + 5, yPos);
       
       pdf.setFillColor(239, 68, 68);
-      pdf.circle(margin + 43, yPos - 1.5, 2, 'F');
+      pdf.circle(margin + 35, yPos - 1, 1.5, 'F');
       pdf.setTextColor(239, 68, 68);
-      pdf.text('Wrong (-0.5)', margin + 48, yPos);
+      pdf.text('Wrong (-0.5)', margin + 38, yPos);
       
       pdf.setFillColor(245, 158, 11);
-      pdf.circle(margin + 83, yPos - 1.5, 2, 'F');
+      pdf.circle(margin + 65, yPos - 1, 1.5, 'F');
       pdf.setTextColor(245, 158, 11);
-      pdf.text('Correct Answer (when wrong)', margin + 88, yPos);
+      pdf.text('Correct Answer', margin + 68, yPos);
       
       pdf.setFillColor(156, 163, 175);
-      pdf.circle(margin + 148, yPos - 1.5, 2, 'F');
+      pdf.circle(margin + 100, yPos - 1, 1.5, 'F');
       pdf.setTextColor(156, 163, 175);
-      pdf.text('Unattempted (0)', margin + 153, yPos);
+      pdf.text('Unattempted', margin + 103, yPos);
       
-      yPos += 10;
+      yPos += 8;
 
       // Process questions by part
       const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
@@ -254,154 +278,198 @@ export const usePdfGenerator = () => {
         const partQuestions = result.questions.filter(q => q.part === part);
         if (partQuestions.length === 0) continue;
 
-        checkNewPage(20);
+        checkNewPage(15);
         
         // Part header
         pdf.setFillColor(59, 130, 246);
-        pdf.rect(margin, yPos, contentWidth, 10, 'F');
+        pdf.rect(margin, yPos, contentWidth, 8, 'F');
         pdf.setTextColor(255, 255, 255);
-        pdf.setFontSize(11);
+        pdf.setFontSize(10);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`Part ${part}: ${SUBJECTS[part]}`, pageWidth / 2, yPos + 7, { align: 'center' });
-        yPos += 15;
+        pdf.text(`Part ${part}: ${SUBJECTS[part]}`, pageWidth / 2, yPos + 5.5, { align: 'center' });
+        yPos += 12;
 
         for (const question of partQuestions) {
-          // Check if we need a new page (question card needs ~70mm)
-          checkNewPage(75);
+          // Estimate required space for this question
+          const estimatedHeight = 55; // Base height for question with options
+          checkNewPage(estimatedHeight);
 
-          // Question card
-          const cardHeight = 65;
+          // Question number with status
+          const qNumY = yPos;
           
-          // Card background
-          pdf.setFillColor(255, 255, 255);
-          pdf.setDrawColor(229, 231, 235);
-          pdf.roundedRect(margin, yPos, contentWidth, cardHeight, 2, 2, 'FD');
-
-          // Question number and status badge
-          pdf.setFillColor(59, 130, 246);
-          pdf.roundedRect(margin + 3, yPos + 3, 12, 8, 1, 1, 'F');
-          pdf.setTextColor(255, 255, 255);
-          pdf.setFontSize(9);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(`${question.questionNumber}`, margin + 9, yPos + 8.5, { align: 'center' });
-
-          // Status badge
+          // Status colors
           const statusColors = {
-            correct: { bg: [220, 252, 231], text: [34, 197, 94] },
-            wrong: { bg: [254, 226, 226], text: [239, 68, 68] },
-            unattempted: { bg: [243, 244, 246], text: [156, 163, 175] },
+            correct: { bg: [220, 252, 231], text: [34, 197, 94], label: '+2.0' },
+            wrong: { bg: [254, 226, 226], text: [239, 68, 68], label: '-0.5' },
+            unattempted: { bg: [243, 244, 246], text: [156, 163, 175], label: '0.0' },
           };
-          const statusLabels = {
-            correct: '+2.0',
-            wrong: '-0.5',
-            unattempted: '0.0',
-          };
+          const status = statusColors[question.status];
           
-          const colors = statusColors[question.status];
-          pdf.setFillColor(colors.bg[0], colors.bg[1], colors.bg[2]);
-          pdf.roundedRect(margin + contentWidth - 18, yPos + 3, 15, 7, 1, 1, 'F');
-          pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          // Question number badge
+          pdf.setFillColor(59, 130, 246);
+          pdf.roundedRect(margin, qNumY, 14, 7, 1, 1, 'F');
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFontSize(10);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`Q.${question.questionNumber}`, margin + 7, qNumY + 5, { align: 'center' });
+          
+          // Status badge
+          pdf.setFillColor(status.bg[0], status.bg[1], status.bg[2]);
+          pdf.roundedRect(margin + contentWidth - 14, qNumY, 14, 7, 1, 1, 'F');
+          pdf.setTextColor(status.text[0], status.text[1], status.text[2]);
           pdf.setFontSize(8);
-          pdf.text(statusLabels[question.status], margin + contentWidth - 10.5, yPos + 7.5, { align: 'center' });
-
-          // Question image placeholder or URL
-          pdf.setFillColor(248, 250, 252);
-          pdf.rect(margin + 3, yPos + 13, contentWidth - 6, 20, 'F');
+          pdf.text(status.label, margin + contentWidth - 7, qNumY + 5, { align: 'center' });
           
+          yPos = qNumY + 10;
+
+          // Question image - try to load and embed
+          let questionImgHeight = 18;
           if (question.questionImageUrl) {
-            // Try to load and embed the image
-            try {
-              const imgData = await loadImageAsBase64(question.questionImageUrl);
-              if (imgData) {
-                pdf.addImage(imgData, 'JPEG', margin + 3, yPos + 13, contentWidth - 6, 20);
+            const imgData = await loadImage(question.questionImageUrl);
+            if (imgData) {
+              // Calculate proportional dimensions
+              const maxWidth = contentWidth - 4;
+              const maxHeight = 35;
+              let imgWidth = maxWidth;
+              let imgHeight = (imgData.height / imgData.width) * imgWidth;
+              
+              if (imgHeight > maxHeight) {
+                imgHeight = maxHeight;
+                imgWidth = (imgData.width / imgData.height) * imgHeight;
+              }
+              
+              // Center the image
+              const imgX = margin + (contentWidth - imgWidth) / 2;
+              
+              try {
+                pdf.addImage(imgData.data, 'JPEG', imgX, yPos, imgWidth, imgHeight);
+                questionImgHeight = imgHeight + 2;
+              } catch {
+                // Fallback - show placeholder
+                pdf.setFillColor(248, 250, 252);
+                pdf.rect(margin + 2, yPos, contentWidth - 4, 15, 'F');
+                pdf.setTextColor(150, 150, 150);
+                pdf.setFontSize(7);
+                pdf.text('Question image could not be loaded', margin + contentWidth / 2, yPos + 8, { align: 'center' });
+                questionImgHeight = 17;
+              }
+            } else {
+              // Placeholder for failed image
+              pdf.setFillColor(248, 250, 252);
+              pdf.rect(margin + 2, yPos, contentWidth - 4, 15, 'F');
+              pdf.setTextColor(150, 150, 150);
+              pdf.setFontSize(7);
+              pdf.text('Question image could not be loaded', margin + contentWidth / 2, yPos + 8, { align: 'center' });
+              questionImgHeight = 17;
+            }
+          } else {
+            pdf.setFillColor(248, 250, 252);
+            pdf.rect(margin + 2, yPos, contentWidth - 4, 15, 'F');
+            pdf.setTextColor(150, 150, 150);
+            pdf.setFontSize(7);
+            pdf.text('No question image available', margin + contentWidth / 2, yPos + 8, { align: 'center' });
+            questionImgHeight = 17;
+          }
+          
+          yPos += questionImgHeight + 2;
+
+          // Options - displayed vertically (A, B, C, D)
+          for (let idx = 0; idx < question.options.length; idx++) {
+            const option = question.options[idx];
+            const optY = yPos;
+            const optHeight = 10;
+            
+            // Determine option background and border colors
+            let optBgColor = [255, 255, 255];
+            let borderColor = [229, 231, 235];
+            let labelBg = [243, 244, 246];
+            let labelText = [0, 0, 0];
+            
+            if (option.isSelected && option.isCorrect) {
+              // Correct answer selected
+              optBgColor = [220, 252, 231];
+              borderColor = [34, 197, 94];
+              labelBg = [34, 197, 94];
+              labelText = [255, 255, 255];
+            } else if (option.isSelected && !option.isCorrect) {
+              // Wrong answer selected
+              optBgColor = [254, 226, 226];
+              borderColor = [239, 68, 68];
+              labelBg = [239, 68, 68];
+              labelText = [255, 255, 255];
+            } else if (!option.isSelected && option.isCorrect && question.status !== 'correct') {
+              // Correct answer when user got it wrong
+              optBgColor = [254, 243, 199];
+              borderColor = [245, 158, 11];
+              labelBg = [245, 158, 11];
+              labelText = [255, 255, 255];
+            }
+            
+            // Option background
+            pdf.setFillColor(optBgColor[0], optBgColor[1], optBgColor[2]);
+            pdf.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+            pdf.roundedRect(margin + 2, optY, contentWidth - 4, optHeight, 1, 1, 'FD');
+            
+            // Option letter (A, B, C, D)
+            pdf.setFillColor(labelBg[0], labelBg[1], labelBg[2]);
+            pdf.roundedRect(margin + 4, optY + 1.5, 7, 7, 1, 1, 'F');
+            pdf.setTextColor(labelText[0], labelText[1], labelText[2]);
+            pdf.setFontSize(8);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(option.id, margin + 7.5, optY + 6.5, { align: 'center' });
+            
+            // Option image
+            if (option.imageUrl) {
+              const optImgData = await loadImage(option.imageUrl);
+              if (optImgData) {
+                try {
+                  // Calculate proportional dimensions for option image
+                  const optMaxWidth = contentWidth - 18;
+                  const optMaxHeight = 8;
+                  let optImgWidth = optMaxWidth;
+                  let optImgHeight = (optImgData.height / optImgData.width) * optImgWidth;
+                  
+                  if (optImgHeight > optMaxHeight) {
+                    optImgHeight = optMaxHeight;
+                    optImgWidth = (optImgData.width / optImgData.height) * optImgHeight;
+                  }
+                  
+                  pdf.addImage(optImgData.data, 'JPEG', margin + 13, optY + 1, optImgWidth, optImgHeight);
+                } catch {
+                  pdf.setTextColor(100, 100, 100);
+                  pdf.setFontSize(7);
+                  pdf.setFont('helvetica', 'normal');
+                  pdf.text('Option image', margin + 14, optY + 6);
+                }
               } else {
                 pdf.setTextColor(100, 100, 100);
                 pdf.setFontSize(7);
-                pdf.text(`Image: ${question.questionImageUrl}`, margin + 5, yPos + 23);
+                pdf.setFont('helvetica', 'normal');
+                pdf.text('Option image', margin + 14, optY + 6);
               }
-            } catch {
-              pdf.setTextColor(100, 100, 100);
-              pdf.setFontSize(7);
-              pdf.text(`Image: ${question.questionImageUrl}`, margin + 5, yPos + 23);
             }
-          } else {
-            pdf.setTextColor(100, 100, 100);
-            pdf.setFontSize(8);
-            pdf.text('Question image not available', margin + contentWidth / 2, yPos + 23, { align: 'center' });
+            
+            yPos += optHeight + 1;
           }
-
-          // Options
-          const optionY = yPos + 36;
-          const optionWidth = (contentWidth - 12) / 4;
           
-          for (let idx = 0; idx < question.options.length; idx++) {
-            const option = question.options[idx];
-            const optX = margin + 3 + idx * (optionWidth + 2);
-            
-            // Option background based on status
-            let optBgColor = [243, 244, 246]; // Default gray
-            let borderColor = [229, 231, 235];
-            
-            if (option.isSelected && option.isCorrect) {
-              optBgColor = [220, 252, 231];
-              borderColor = [34, 197, 94];
-            } else if (option.isSelected && !option.isCorrect) {
-              optBgColor = [254, 226, 226];
-              borderColor = [239, 68, 68];
-            } else if (!option.isSelected && option.isCorrect && question.status !== 'correct') {
-              optBgColor = [254, 243, 199];
-              borderColor = [245, 158, 11];
-            }
-            
-            pdf.setFillColor(optBgColor[0], optBgColor[1], optBgColor[2]);
-            pdf.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-            pdf.roundedRect(optX, optionY, optionWidth, 22, 1, 1, 'FD');
-            
-            // Option letter
-            pdf.setFillColor(255, 255, 255);
-            pdf.setDrawColor(200, 200, 200);
-            pdf.circle(optX + 5, optionY + 4, 3, 'FD');
-            pdf.setTextColor(0, 0, 0);
-            pdf.setFontSize(7);
-            pdf.setFont('helvetica', 'bold');
-            pdf.text(option.id, optX + 5, optionY + 5.5, { align: 'center' });
-            
-            // Option image or placeholder
-            if (option.imageUrl) {
-              try {
-                const optImgData = await loadImageAsBase64(option.imageUrl);
-                if (optImgData) {
-                  pdf.addImage(optImgData, 'JPEG', optX + 2, optionY + 8, optionWidth - 4, 12);
-                } else {
-                  pdf.setTextColor(100, 100, 100);
-                  pdf.setFontSize(6);
-                  pdf.text('Image', optX + optionWidth / 2, optionY + 14, { align: 'center' });
-                }
-              } catch {
-                pdf.setTextColor(100, 100, 100);
-                pdf.setFontSize(6);
-                pdf.text('Image', optX + optionWidth / 2, optionY + 14, { align: 'center' });
-              }
-            }
-          }
-
-          yPos += cardHeight + 5;
+          yPos += 5; // Space between questions
+          
           processedCount++;
           setProgress(Math.round((processedCount / totalQuestions) * 100));
         }
       }
 
       // ============ FOOTER ON LAST PAGE ============
-      checkNewPage(25);
-      yPos = pageHeight - 30;
+      checkNewPage(20);
+      yPos = pageHeight - 20;
       
       pdf.setFillColor(248, 250, 252);
-      pdf.rect(0, yPos - 5, pageWidth, 35, 'F');
+      pdf.rect(0, yPos - 3, pageWidth, 23, 'F');
       
       pdf.setTextColor(100, 100, 100);
-      pdf.setFontSize(8);
-      pdf.text('This is an unofficial analysis report generated for personal use only.', pageWidth / 2, yPos + 5, { align: 'center' });
-      pdf.text('Not affiliated with Staff Selection Commission.', pageWidth / 2, yPos + 10, { align: 'center' });
+      pdf.setFontSize(7);
+      pdf.text('This is an unofficial analysis report generated for personal use only.', pageWidth / 2, yPos + 3, { align: 'center' });
+      pdf.text('Not affiliated with Staff Selection Commission.', pageWidth / 2, yPos + 8, { align: 'center' });
 
       // Save the PDF
       const fileName = `SSC_CGL_Analysis_${result.candidate.rollNumber || 'Report'}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -423,11 +491,4 @@ export const usePdfGenerator = () => {
     isGenerating,
     progress,
   };
-};
-
-const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
-  A: 'General Intelligence & Reasoning',
-  B: 'General Awareness',
-  C: 'Quantitative Aptitude',
-  D: 'English Comprehension',
 };

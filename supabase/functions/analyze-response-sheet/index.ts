@@ -79,11 +79,12 @@ function generatePartUrls(inputUrl: string): { part: 'A' | 'B' | 'C' | 'D'; url:
   const baseDir = basePath.substring(0, lastSlashIndex + 1);
   
   // Generate all 4 part URLs
+  // Correct URL patterns for all 4 parts
   const partFiles = [
-    { file: 'ViewCandResponse.aspx', part: 'A' as const },
-    { file: 'ViewCandResponse1.aspx', part: 'B' as const },
-    { file: 'ViewCandResponse3.aspx', part: 'C' as const },
-    { file: 'ViewCandResponse4.aspx', part: 'D' as const },
+    { file: 'ViewCandResponse.aspx', part: 'A' as const },   // Part A
+    { file: 'ViewCandResponse1.aspx', part: 'B' as const },  // Part B  
+    { file: 'ViewCandResponse3.aspx', part: 'C' as const },  // Part C
+    { file: 'ViewCandResponse4.aspx', part: 'D' as const },  // Part D
   ];
   
   for (const { file, part } of partFiles) {
