@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AnalysisResult } from '@/lib/mockData';
+import type { ExamType, Language } from '@/lib/examConfig';
 
 interface AnalyzeResponse {
   success: boolean;
@@ -7,10 +8,14 @@ interface AnalyzeResponse {
   data?: AnalysisResult;
 }
 
-export async function analyzeResponseSheet(url: string): Promise<AnalyzeResponse> {
+export async function analyzeResponseSheet(
+  url: string, 
+  examType: ExamType, 
+  language: Language
+): Promise<AnalyzeResponse> {
   try {
     const { data, error } = await supabase.functions.invoke('analyze-response-sheet', {
-      body: { url },
+      body: { url, examType, language },
     });
 
     if (error) {

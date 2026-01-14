@@ -16,7 +16,7 @@ interface CandidateInfo {
 
 interface QuestionData {
   questionNumber: number;
-  part: 'A' | 'B' | 'C' | 'D';
+  part: string;
   subject: string;
   questionImageUrl: string;
   options: {
@@ -30,16 +30,43 @@ interface QuestionData {
 }
 
 interface SectionData {
-  part: 'A' | 'B' | 'C' | 'D';
+  part: string;
   subject: string;
   correct: number;
   wrong: number;
   unattempted: number;
   score: number;
+  maxMarks: number;
+  correctMarks: number;
+  negativeMarks: number;
+  isQualifying?: boolean;
+}
+
+interface SubjectConfig {
+  name: string;
+  part: string;
+  totalQuestions: number;
+  maxMarks: number;
+  correctMarks: number;
+  negativeMarks: number;
+  isQualifying?: boolean;
+}
+
+interface ExamConfig {
+  id: string;
+  name: string;
+  displayName: string;
+  emoji: string;
+  subjects: SubjectConfig[];
+  totalQuestions: number;
+  maxMarks: number;
 }
 
 interface AnalysisResult {
   candidate: CandidateInfo;
+  examType: string;
+  examConfig: ExamConfig;
+  language: string;
   totalScore: number;
   maxScore: number;
   totalQuestions: number;
@@ -50,46 +77,146 @@ interface AnalysisResult {
   questions: QuestionData[];
 }
 
-const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
-  A: 'General Intelligence & Reasoning',
-  B: 'General Awareness',
-  C: 'Quantitative Aptitude',
-  D: 'English Comprehension',
+// Exam configurations
+const EXAM_CONFIGS: Record<string, ExamConfig> = {
+  SSC_CGL_PRE: {
+    id: 'SSC_CGL_PRE',
+    name: 'SSC CGL PRE (Tier-I)',
+    displayName: 'SSC CGL Tier-I',
+    emoji: '🟢',
+    subjects: [
+      { name: 'General Intelligence & Reasoning', part: 'A', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 0.50 },
+      { name: 'General Awareness', part: 'B', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 0.50 },
+      { name: 'Quantitative Aptitude', part: 'C', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 0.50 },
+      { name: 'English Comprehension', part: 'D', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 0.50 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 200,
+  },
+  SSC_CGL_MAINS: {
+    id: 'SSC_CGL_MAINS',
+    name: 'SSC CGL MAINS (Tier-II)',
+    displayName: 'SSC CGL Tier-II',
+    emoji: '🟢',
+    subjects: [
+      { name: 'Mathematical Abilities', part: 'A', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
+      { name: 'Reasoning & General Intelligence', part: 'B', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
+      { name: 'English Language & Comprehension', part: 'C', totalQuestions: 45, maxMarks: 135, correctMarks: 3, negativeMarks: 1 },
+      { name: 'General Awareness', part: 'D', totalQuestions: 25, maxMarks: 75, correctMarks: 3, negativeMarks: 0.50, isQualifying: true },
+      { name: 'Computer Knowledge', part: 'E', totalQuestions: 20, maxMarks: 60, correctMarks: 3, negativeMarks: 0.50, isQualifying: true },
+    ],
+    totalQuestions: 150,
+    maxMarks: 450,
+  },
+  SSC_CHSL_PRE: {
+    id: 'SSC_CHSL_PRE',
+    name: 'SSC CHSL PRE (Tier-I)',
+    displayName: 'SSC CHSL Tier-I',
+    emoji: '🟣',
+    subjects: [
+      { name: 'General Intelligence', part: 'A', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 1 },
+      { name: 'English Language', part: 'B', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 1 },
+      { name: 'Quantitative Aptitude', part: 'C', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 1 },
+      { name: 'General Awareness', part: 'D', totalQuestions: 25, maxMarks: 50, correctMarks: 2, negativeMarks: 1 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 200,
+  },
+  SSC_CHSL_MAINS: {
+    id: 'SSC_CHSL_MAINS',
+    name: 'SSC CHSL MAINS (Tier-II)',
+    displayName: 'SSC CHSL Tier-II',
+    emoji: '🟣',
+    subjects: [
+      { name: 'Mathematical Abilities', part: 'A', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
+      { name: 'Reasoning & General Awareness', part: 'B', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
+      { name: 'English Language & Comprehension', part: 'C', totalQuestions: 45, maxMarks: 135, correctMarks: 3, negativeMarks: 1 },
+      { name: 'Computer Knowledge', part: 'D', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
+    ],
+    totalQuestions: 135,
+    maxMarks: 405,
+  },
+  SSC_CPO_PRE: {
+    id: 'SSC_CPO_PRE',
+    name: 'SSC CPO PRE (Paper-I)',
+    displayName: 'SSC CPO Paper-I',
+    emoji: '🔵',
+    subjects: [
+      { name: 'General Intelligence & Reasoning', part: 'A', totalQuestions: 50, maxMarks: 50, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'General Knowledge & Awareness', part: 'B', totalQuestions: 50, maxMarks: 50, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Quantitative Aptitude', part: 'C', totalQuestions: 50, maxMarks: 50, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Comprehension', part: 'D', totalQuestions: 50, maxMarks: 50, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 200,
+    maxMarks: 200,
+  },
+  SSC_CPO_MAINS: {
+    id: 'SSC_CPO_MAINS',
+    name: 'SSC CPO MAINS (Paper-II)',
+    displayName: 'SSC CPO Paper-II',
+    emoji: '🔵',
+    subjects: [
+      { name: 'English Language & Comprehension', part: 'A', totalQuestions: 200, maxMarks: 200, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 200,
+    maxMarks: 200,
+  },
+  DELHI_POLICE_CONSTABLE: {
+    id: 'DELHI_POLICE_CONSTABLE',
+    name: 'Delhi Police Constable (CBT)',
+    displayName: 'DP Constable',
+    emoji: '🚓',
+    subjects: [
+      { name: 'General Knowledge & Current Affairs', part: 'A', totalQuestions: 50, maxMarks: 50, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Reasoning Ability', part: 'B', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Numerical Ability', part: 'C', totalQuestions: 15, maxMarks: 15, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Computer Awareness', part: 'D', totalQuestions: 10, maxMarks: 10, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 100,
+  },
+  DELHI_POLICE_HEAD_CONSTABLE: {
+    id: 'DELHI_POLICE_HEAD_CONSTABLE',
+    name: 'Delhi Police Head Constable (CBT)',
+    displayName: 'DP Head Constable',
+    emoji: '🚔',
+    subjects: [
+      { name: 'General Awareness', part: 'A', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Quantitative Aptitude', part: 'B', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Reasoning', part: 'C', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Language', part: 'D', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Computer Fundamentals', part: 'E', totalQuestions: 10, maxMarks: 10, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 100,
+  },
 };
 
-// Map URL suffix to part
-const PART_URL_MAP: Record<string, 'A' | 'B' | 'C' | 'D'> = {
-  'ViewCandResponse.aspx': 'A',
-  'ViewCandResponse1.aspx': 'B',
-  'ViewCandResponse3.aspx': 'C',
-  'ViewCandResponse4.aspx': 'D',
-};
-
-// Generate URLs for all 4 parts from a given URL
-function generatePartUrls(inputUrl: string): { part: 'A' | 'B' | 'C' | 'D'; url: string }[] {
-  const parts: { part: 'A' | 'B' | 'C' | 'D'; url: string }[] = [];
+// Generate URLs for all parts based on exam config
+function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: string; url: string; subject: SubjectConfig }[] {
+  const parts: { part: string; url: string; subject: SubjectConfig }[] = [];
   
-  // Extract base URL and query params
   const urlParts = inputUrl.split('?');
   const queryString = urlParts[1] || '';
   const basePath = urlParts[0];
-  
-  // Find the base directory
   const lastSlashIndex = basePath.lastIndexOf('/');
   const baseDir = basePath.substring(0, lastSlashIndex + 1);
   
-  // Generate all 4 part URLs
-  // Correct URL patterns for all 4 parts
-  const partFiles = [
-    { file: 'ViewCandResponse.aspx', part: 'A' as const },   // Part A
-    { file: 'ViewCandResponse2.aspx', part: 'B' as const },  // Part B  
-    { file: 'ViewCandResponse3.aspx', part: 'C' as const },  // Part C
-    { file: 'ViewCandResponse4.aspx', part: 'D' as const },  // Part D
-  ];
+  // Map parts to file names
+  const partFileMap: Record<string, string> = {
+    'A': 'ViewCandResponse.aspx',
+    'B': 'ViewCandResponse2.aspx',
+    'C': 'ViewCandResponse3.aspx',
+    'D': 'ViewCandResponse4.aspx',
+    'E': 'ViewCandResponse5.aspx',
+  };
   
-  for (const { file, part } of partFiles) {
-    const url = `${baseDir}${file}${queryString ? '?' + queryString : ''}`;
-    parts.push({ part, url });
+  for (const subject of examConfig.subjects) {
+    const file = partFileMap[subject.part];
+    if (file) {
+      const url = `${baseDir}${file}${queryString ? '?' + queryString : ''}`;
+      parts.push({ part: subject.part, url, subject });
+    }
   }
   
   return parts;
@@ -112,7 +239,7 @@ function parseCandidateInfo(html: string): CandidateInfo {
   return {
     rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
     name: getTableValue('Candidate Name') || getTableValue('Name') || '',
-    examLevel: getTableValue('Exam Level') || 'SSC CGL Tier 1',
+    examLevel: getTableValue('Exam Level') || '',
     testDate: getTableValue('Test Date') || '',
     shift: getTableValue('Test Time') || getTableValue('Shift') || '',
     centreName: getTableValue('Centre Name') || getTableValue('Center Name') || '',
@@ -120,15 +247,19 @@ function parseCandidateInfo(html: string): CandidateInfo {
 }
 
 // Parse questions from HTML for a specific part
-function parseQuestionsForPart(html: string, part: 'A' | 'B' | 'C' | 'D', baseUrl: string): QuestionData[] {
+function parseQuestionsForPart(
+  html: string, 
+  part: string, 
+  baseUrl: string, 
+  subject: SubjectConfig,
+  questionOffset: number
+): QuestionData[] {
   const questions: QuestionData[] = [];
   
-  // Extract base URL for resolving relative image paths
   const urlParts = baseUrl.split('?')[0];
   const lastSlashIndex = urlParts.lastIndexOf('/');
   const baseDir = urlParts.substring(0, lastSlashIndex + 1);
   
-  // Find all question tables
   const questionTablePattern = /<table[^>]*>[\s\S]*?Q\.No:\s*&nbsp;(\d+)[\s\S]*?<\/table>/gi;
   let tableMatch;
   
@@ -136,17 +267,14 @@ function parseQuestionsForPart(html: string, part: 'A' | 'B' | 'C' | 'D', baseUr
     const qNum = parseInt(tableMatch[1]);
     const tableContent = tableMatch[0];
     
-    // Find question image
     const qImgPattern = /Q\.No:\s*&nbsp;\d+<\/font><\/td><td[^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i;
     const qImgMatch = tableContent.match(qImgPattern);
     let questionImageUrl = qImgMatch ? qImgMatch[1] : '';
     
-    // Make image URL absolute
     if (questionImageUrl && !questionImageUrl.startsWith('http')) {
       questionImageUrl = baseDir + questionImageUrl;
     }
     
-    // Parse options
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
     
@@ -221,16 +349,19 @@ function parseQuestionsForPart(html: string, part: 'A' | 'B' | 'C' | 'D', baseUr
         status = 'wrong';
       }
       
-      const marksAwarded = status === 'correct' ? 2 : status === 'wrong' ? -0.5 : 0;
+      // Calculate marks based on exam-specific marking scheme
+      const marksAwarded = status === 'correct' 
+        ? subject.correctMarks 
+        : status === 'wrong' 
+          ? -subject.negativeMarks 
+          : 0;
       
-      // Calculate the actual question number based on part (25 questions per part)
-      const partOffset = { A: 0, B: 25, C: 50, D: 75 };
-      const actualQuestionNumber = partOffset[part] + qNum;
+      const actualQuestionNumber = questionOffset + qNum;
       
       questions.push({
         questionNumber: actualQuestionNumber,
         part,
-        subject: SUBJECTS[part],
+        subject: subject.name,
         questionImageUrl,
         options,
         status,
@@ -243,35 +374,31 @@ function parseQuestionsForPart(html: string, part: 'A' | 'B' | 'C' | 'D', baseUr
 }
 
 // Calculate section-wise breakdown
-function calculateSections(questions: QuestionData[]): SectionData[] {
-  const sectionMap = new Map<'A' | 'B' | 'C' | 'D', SectionData>();
+function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
+  const sections: SectionData[] = [];
   
-  const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
-  parts.forEach(part => {
-    sectionMap.set(part, {
-      part,
-      subject: SUBJECTS[part],
-      correct: 0,
-      wrong: 0,
-      unattempted: 0,
-      score: 0,
+  for (const subject of examConfig.subjects) {
+    const partQuestions = questions.filter(q => q.part === subject.part);
+    const correct = partQuestions.filter(q => q.status === 'correct').length;
+    const wrong = partQuestions.filter(q => q.status === 'wrong').length;
+    const unattempted = partQuestions.filter(q => q.status === 'unattempted').length;
+    const score = correct * subject.correctMarks - wrong * subject.negativeMarks;
+    
+    sections.push({
+      part: subject.part,
+      subject: subject.name,
+      correct,
+      wrong,
+      unattempted,
+      score,
+      maxMarks: subject.maxMarks,
+      correctMarks: subject.correctMarks,
+      negativeMarks: subject.negativeMarks,
+      isQualifying: subject.isQualifying,
     });
-  });
+  }
   
-  questions.forEach(q => {
-    const section = sectionMap.get(q.part)!;
-    if (q.status === 'correct') {
-      section.correct++;
-      section.score += 2;
-    } else if (q.status === 'wrong') {
-      section.wrong++;
-      section.score -= 0.5;
-    } else {
-      section.unattempted++;
-    }
-  });
-  
-  return Array.from(sectionMap.values());
+  return sections;
 }
 
 serve(async (req) => {
@@ -280,7 +407,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    const { url, examType, language } = await req.json();
 
     if (!url) {
       return new Response(
@@ -288,6 +415,16 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    if (!examType || !EXAM_CONFIGS[examType]) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Valid exam type is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const examConfig = EXAM_CONFIGS[examType];
+    console.log('Analyzing for exam:', examConfig.name, 'Language:', language);
 
     const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
     if (!apiKey) {
@@ -298,15 +435,23 @@ serve(async (req) => {
       );
     }
 
-    // Generate URLs for all 4 parts
-    const partUrls = generatePartUrls(url);
-    console.log('Fetching all 4 parts:', partUrls.map(p => p.part).join(', '));
+    // Generate URLs for all parts based on exam config
+    const partUrls = generatePartUrls(url, examConfig);
+    console.log('Fetching parts:', partUrls.map(p => p.part).join(', '));
 
     let allQuestions: QuestionData[] = [];
     let candidate: CandidateInfo | null = null;
 
+    // Calculate question offsets for each part
+    let questionOffset = 0;
+    const partOffsets: Record<string, number> = {};
+    for (const subject of examConfig.subjects) {
+      partOffsets[subject.part] = questionOffset;
+      questionOffset += subject.totalQuestions;
+    }
+
     // Fetch all parts in parallel
-    const fetchPromises = partUrls.map(async ({ part, url: partUrl }) => {
+    const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
       console.log(`Scraping Part ${part}:`, partUrl);
       
       try {
@@ -333,7 +478,7 @@ serve(async (req) => {
         const html = scrapeData.data?.html || scrapeData.data?.rawHtml || '';
         console.log(`Part ${part} HTML length:`, html.length);
 
-        const questions = parseQuestionsForPart(html, part, partUrl);
+        const questions = parseQuestionsForPart(html, part, partUrl, subject, partOffsets[part]);
         console.log(`Part ${part} questions count:`, questions.length);
 
         return { part, questions, html };
@@ -349,7 +494,6 @@ serve(async (req) => {
     for (const result of results) {
       allQuestions = allQuestions.concat(result.questions);
       
-      // Parse candidate info from the first successful part
       if (!candidate && result.html) {
         candidate = parseCandidateInfo(result.html);
       }
@@ -364,7 +508,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Could not parse questions from the response sheet. The URL may not be a valid SSC CGL response sheet, or the format may have changed.' 
+          error: 'Could not parse questions from the response sheet. The URL may not be a valid response sheet, or the format may have changed.' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -375,7 +519,7 @@ serve(async (req) => {
       candidate = {
         rollNumber: '',
         name: '',
-        examLevel: 'SSC CGL Tier 1',
+        examLevel: examConfig.name,
         testDate: '',
         shift: '',
         centreName: '',
@@ -383,18 +527,21 @@ serve(async (req) => {
     }
 
     // Calculate sections
-    const sections = calculateSections(allQuestions);
+    const sections = calculateSections(allQuestions, examConfig);
     
     // Calculate totals
     const correctCount = allQuestions.filter(q => q.status === 'correct').length;
     const wrongCount = allQuestions.filter(q => q.status === 'wrong').length;
     const unattemptedCount = allQuestions.filter(q => q.status === 'unattempted').length;
-    const totalScore = correctCount * 2 - wrongCount * 0.5;
+    const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
     
     const analysisResult: AnalysisResult = {
       candidate,
+      examType,
+      examConfig,
+      language,
       totalScore,
-      maxScore: allQuestions.length * 2,
+      maxScore: examConfig.maxMarks,
       totalQuestions: allQuestions.length,
       correctCount,
       wrongCount,
@@ -403,7 +550,7 @@ serve(async (req) => {
       questions: allQuestions,
     };
 
-    console.log('Analysis complete. Total score:', totalScore, '/', allQuestions.length * 2);
+    console.log('Analysis complete. Total score:', totalScore, '/', examConfig.maxMarks);
 
     return new Response(
       JSON.stringify({ success: true, data: analysisResult }),

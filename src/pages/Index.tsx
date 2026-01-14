@@ -4,24 +4,26 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
 import { analyzeResponseSheet } from '@/lib/api/analyzeSheet';
 import type { AnalysisResult } from '@/lib/mockData';
+import type { ExamType, Language } from '@/lib/examConfig';
 import { FileText, Shield, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
 type AppState = 'input' | 'loading' | 'results';
+
 const Index = () => {
   const [appState, setAppState] = useState<AppState>('input');
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const analysisPromise = useRef<Promise<void> | null>(null);
-  const {
-    toast
-  } = useToast();
-  const handleAnalyze = async (url: string) => {
-    console.log('Analyzing URL:', url);
+  const { toast } = useToast();
+
+  const handleAnalyze = async (url: string, examType: ExamType, language: Language) => {
+    console.log('Analyzing URL:', url, 'Exam:', examType, 'Language:', language);
     setIsLoading(true);
     setAppState('loading');
 
     // Start the API call
-    analysisPromise.current = analyzeResponseSheet(url).then(response => {
+    analysisPromise.current = analyzeResponseSheet(url, examType, language).then(response => {
       if (response.success && response.data) {
         setAnalysisResult(response.data);
       } else {
@@ -78,7 +80,7 @@ const Index = () => {
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
               <FileText className="h-4 w-4" />
-              SSC CGL Tier-I Analysis Tool
+              SSC Response Sheet Analyzer
             </div>
             
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">

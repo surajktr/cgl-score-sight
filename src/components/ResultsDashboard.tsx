@@ -113,11 +113,12 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
               correctCount={result.correctCount}
               wrongCount={result.wrongCount}
               unattemptedCount={result.unattemptedCount}
+              examConfig={result.examConfig}
             />
           </div>
 
           {/* Section Breakdown */}
-          <SectionBreakdown sections={result.sections} />
+          <SectionBreakdown sections={result.sections} maxScore={result.maxScore} />
 
           {/* Questions Table */}
           <QuestionsTable questions={result.questions} result={result} />
