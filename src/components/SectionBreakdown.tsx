@@ -3,22 +3,72 @@ import type { SectionData } from '@/lib/mockData';
 
 interface SectionBreakdownProps {
   sections: SectionData[];
+  maxScore: number;
 }
 
-export const SectionBreakdown = ({ sections }: SectionBreakdownProps) => {
+export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) => {
   return (
-    <div className="card-elevated p-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-      <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+    <div className="card-elevated p-4 sm:p-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+      <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
         <BarChart2 className="h-5 w-5 text-primary" />
         Section-wise Breakdown
       </h2>
 
-      <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="block sm:hidden space-y-3">
+        {sections.map((section) => (
+          <div 
+            key={section.part}
+            className="p-4 rounded-lg border border-border/50 bg-muted/20"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 text-primary font-bold text-sm">
+                  {section.part}
+                </span>
+                <span className="text-sm font-medium text-foreground truncate max-w-[180px]">
+                  {section.subject}
+                </span>
+              </div>
+              {section.isQualifying && (
+                <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                  Qualifying
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="p-2 rounded-md bg-correct-bg">
+                <div className="text-sm font-bold text-correct">{section.correct}</div>
+                <div className="text-xs text-correct/70">Correct</div>
+              </div>
+              <div className="p-2 rounded-md bg-wrong-bg">
+                <div className="text-sm font-bold text-wrong">{section.wrong}</div>
+                <div className="text-xs text-wrong/70">Wrong</div>
+              </div>
+              <div className="p-2 rounded-md bg-unattempted-bg">
+                <div className="text-sm font-bold text-unattempted">{section.unattempted}</div>
+                <div className="text-xs text-unattempted/70">Skip</div>
+              </div>
+              <div className="p-2 rounded-md bg-primary/10">
+                <div className="text-sm font-bold text-primary">{section.score.toFixed(1)}</div>
+                <div className="text-xs text-primary/70">/{section.maxMarks}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground text-center">
+              +{section.correctMarks} / -{section.negativeMarks}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Part</th>
               <th className="text-left py-3 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subject</th>
+              <th className="text-center py-3 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Marks</th>
               <th className="text-center py-3 px-2 text-xs font-semibold text-correct uppercase tracking-wider">Correct</th>
               <th className="text-center py-3 px-2 text-xs font-semibold text-wrong uppercase tracking-wider">Wrong</th>
               <th className="text-center py-3 px-2 text-xs font-semibold text-unattempted uppercase tracking-wider">Skipped</th>
@@ -26,7 +76,7 @@ export const SectionBreakdown = ({ sections }: SectionBreakdownProps) => {
             </tr>
           </thead>
           <tbody>
-            {sections.map((section, index) => (
+            {sections.map((section) => (
               <tr 
                 key={section.part} 
                 className="border-b border-border/50 hover:bg-muted/30 transition-colors"
@@ -37,7 +87,19 @@ export const SectionBreakdown = ({ sections }: SectionBreakdownProps) => {
                   </span>
                 </td>
                 <td className="py-4 px-2">
-                  <span className="text-sm font-medium text-foreground">{section.subject}</span>
+                  <div>
+                    <span className="text-sm font-medium text-foreground">{section.subject}</span>
+                    {section.isQualifying && (
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                        Qualifying
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="py-4 px-2 text-center">
+                  <span className="text-xs text-muted-foreground">
+                    +{section.correctMarks} / -{section.negativeMarks}
+                  </span>
                 </td>
                 <td className="py-4 px-2 text-center">
                   <span className="inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded-md bg-correct-bg text-correct font-semibold text-sm">
@@ -55,15 +117,15 @@ export const SectionBreakdown = ({ sections }: SectionBreakdownProps) => {
                   </span>
                 </td>
                 <td className="py-4 px-2 text-right">
-                  <span className="score-display text-lg font-bold text-primary">{section.score}</span>
-                  <span className="text-xs text-muted-foreground ml-1">/50</span>
+                  <span className="score-display text-lg font-bold text-primary">{section.score.toFixed(1)}</span>
+                  <span className="text-xs text-muted-foreground ml-1">/{section.maxMarks}</span>
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="bg-muted/30">
-              <td className="py-4 px-2 font-semibold text-foreground" colSpan={2}>Total</td>
+              <td className="py-4 px-2 font-semibold text-foreground" colSpan={3}>Total</td>
               <td className="py-4 px-2 text-center">
                 <span className="font-bold text-correct">
                   {sections.reduce((sum, s) => sum + s.correct, 0)}
@@ -81,9 +143,9 @@ export const SectionBreakdown = ({ sections }: SectionBreakdownProps) => {
               </td>
               <td className="py-4 px-2 text-right">
                 <span className="score-display text-xl font-bold text-primary">
-                  {sections.reduce((sum, s) => sum + s.score, 0)}
+                  {sections.reduce((sum, s) => sum + s.score, 0).toFixed(1)}
                 </span>
-                <span className="text-sm text-muted-foreground ml-1">/200</span>
+                <span className="text-sm text-muted-foreground ml-1">/{maxScore}</span>
               </td>
             </tr>
           </tfoot>

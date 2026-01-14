@@ -1,3 +1,5 @@
+import type { ExamType, Language, ExamConfig } from './examConfig';
+
 export interface CandidateInfo {
   rollNumber: string;
   name: string;
@@ -9,7 +11,7 @@ export interface CandidateInfo {
 
 export interface QuestionData {
   questionNumber: number;
-  part: 'A' | 'B' | 'C' | 'D';
+  part: string;
   subject: string;
   questionImageUrl: string;
   options: {
@@ -23,16 +25,23 @@ export interface QuestionData {
 }
 
 export interface SectionData {
-  part: 'A' | 'B' | 'C' | 'D';
+  part: string;
   subject: string;
   correct: number;
   wrong: number;
   unattempted: number;
   score: number;
+  maxMarks: number;
+  correctMarks: number;
+  negativeMarks: number;
+  isQualifying?: boolean;
 }
 
 export interface AnalysisResult {
   candidate: CandidateInfo;
+  examType: ExamType;
+  examConfig: ExamConfig;
+  language: Language;
   totalScore: number;
   maxScore: number;
   totalQuestions: number;
@@ -42,6 +51,8 @@ export interface AnalysisResult {
   sections: SectionData[];
   questions: QuestionData[];
 }
+
+import { EXAM_CONFIGS } from './examConfig';
 
 // Mock data for demonstration
 export const mockAnalysisResult: AnalysisResult = {
@@ -53,6 +64,9 @@ export const mockAnalysisResult: AnalysisResult = {
     shift: "Shift-I (9:00 AM - 10:00 AM)",
     centreName: "Delhi Public School, Mathura Road, New Delhi",
   },
+  examType: 'SSC_CGL_PRE',
+  examConfig: EXAM_CONFIGS.SSC_CGL_PRE,
+  language: 'hindi',
   totalScore: 142.5,
   maxScore: 200,
   totalQuestions: 100,
@@ -60,10 +74,10 @@ export const mockAnalysisResult: AnalysisResult = {
   wrongCount: 13,
   unattemptedCount: 11,
   sections: [
-    { part: 'A', subject: 'General Intelligence & Reasoning', correct: 21, wrong: 2, unattempted: 2, score: 41 },
-    { part: 'B', subject: 'General Awareness', correct: 18, wrong: 4, unattempted: 3, score: 34 },
-    { part: 'C', subject: 'Quantitative Aptitude', correct: 19, wrong: 4, unattempted: 2, score: 36 },
-    { part: 'D', subject: 'English Comprehension', correct: 18, wrong: 3, unattempted: 4, score: 34.5 },
+    { part: 'A', subject: 'General Intelligence & Reasoning', correct: 21, wrong: 2, unattempted: 2, score: 41, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'B', subject: 'General Awareness', correct: 18, wrong: 4, unattempted: 3, score: 34, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'C', subject: 'Quantitative Aptitude', correct: 19, wrong: 4, unattempted: 2, score: 36, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'D', subject: 'English Comprehension', correct: 18, wrong: 3, unattempted: 4, score: 34.5, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
   ],
   questions: generateMockQuestions(),
 };

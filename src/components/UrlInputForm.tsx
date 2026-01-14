@@ -1,22 +1,38 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, FileText, BarChart3, Download, AlertCircle } from 'lucide-react';
+import { Search, FileText, BarChart3, Download } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { EXAM_LIST, type ExamType, type Language } from '@/lib/examConfig';
+
 interface UrlInputFormProps {
-  onAnalyze: (url: string) => void;
+  onAnalyze: (url: string, examType: ExamType, language: Language) => void;
   isLoading: boolean;
 }
+
 export const UrlInputForm = ({
   onAnalyze,
   isLoading
 }: UrlInputFormProps) => {
   const [url, setUrl] = useState('');
+  const [examType, setExamType] = useState<ExamType | ''>('');
+  const [language, setLanguage] = useState<Language | ''>('');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (url.trim()) {
-      onAnalyze(url.trim());
+    if (url.trim() && examType && language) {
+      onAnalyze(url.trim(), examType, language);
     }
   };
+
+  const isFormValid = url.trim() && examType && language;
+
   const features = [{
     icon: FileText,
     title: 'Extract Data',
@@ -30,33 +46,93 @@ export const UrlInputForm = ({
     title: 'Download PDF',
     description: 'Generate a comprehensive PDF report with all questions and answers'
   }];
-  return <div className="w-full max-w-3xl mx-auto">
-      <form onSubmit={handleSubmit} className="relative mb-8">
-        <div className="flex gap-3">
+
+  return (
+    <div className="w-full max-w-3xl mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-4 mb-8">
+        {/* Exam Type & Language Selection */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Select value={examType} onValueChange={(value) => setExamType(value as ExamType)}>
+            <SelectTrigger className="h-12 bg-card border-border/60">
+              <SelectValue placeholder="Select Exam Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {EXAM_LIST.map((exam) => (
+                <SelectItem key={exam.id} value={exam.id}>
+                  <span className="flex items-center gap-2">
+                    <span>{exam.emoji}</span>
+                    <span className="truncate">{exam.name}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+            <SelectTrigger className="h-12 bg-card border-border/60">
+              <SelectValue placeholder="Select Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="hindi">
+                <span className="flex items-center gap-2">
+                  <span>🇮🇳</span>
+                  <span>Hindi / हिंदी</span>
+                </span>
+              </SelectItem>
+              <SelectItem value="english">
+                <span className="flex items-center gap-2">
+                  <span>🇬🇧</span>
+                  <span>English</span>
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* URL Input */}
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="Paste your SSC CGL response sheet URL here..." className="pl-12 h-14 text-base bg-card border-border/60 shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary" required />
+            <Input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste your response sheet URL here..."
+              className="pl-12 h-14 text-base bg-card border-border/60 shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            />
           </div>
-          <Button type="submit" disabled={isLoading || !url.trim()} size="lg" className="h-14 px-8 text-base font-semibold shadow-md hover:shadow-lg transition-all">
-            {isLoading ? <>
-                <span className="animate-pulse-subtle">Analyzing...</span>
-              </> : 'Analyze'}
+          <Button
+            type="submit"
+            disabled={isLoading || !isFormValid}
+            size="lg"
+            className="h-14 px-8 text-base font-semibold shadow-md hover:shadow-lg transition-all w-full sm:w-auto"
+          >
+            {isLoading ? (
+              <span className="animate-pulse-subtle">Analyzing...</span>
+            ) : (
+              'Analyze'
+            )}
           </Button>
         </div>
       </form>
 
-      <div className="grid md:grid-cols-3 gap-4 mb-8">
-        {features.map(feature => <div key={feature.title} className="stat-card flex items-start gap-3 hover:shadow-md transition-shadow">
-            <div className="p-2 rounded-lg bg-primary/10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        {features.map((feature) => (
+          <div
+            key={feature.title}
+            className="stat-card flex items-start gap-3 hover:shadow-md transition-shadow"
+          >
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
               <feature.icon className="h-5 w-5 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 className="font-semibold text-foreground mb-1">{feature.title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
             </div>
-          </div>)}
+          </div>
+        ))}
       </div>
-
-      
-    </div>;
+    </div>
+  );
 };
