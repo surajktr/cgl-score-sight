@@ -1,74 +1,81 @@
 import { useState, useCallback } from 'react';
 import type { AnalysisResult } from '@/lib/mockData';
 
-const SUBJECTS: Record<'A' | 'B' | 'C' | 'D', string> = {
-  A: 'General Intelligence & Reasoning',
-  B: 'General Awareness',
-  C: 'Quantitative Aptitude',
-  D: 'English Comprehension',
-};
+export type HtmlMode = 'normal' | 'quiz';
 
 export const useHtmlGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const generateHtml = useCallback(async (result: AnalysisResult) => {
+  const generateHtml = useCallback(async (result: AnalysisResult, mode: HtmlMode = 'normal') => {
     setIsGenerating(true);
 
     try {
-      const parts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+      const examName = result.examConfig?.name || 'SSC Exam';
+      const sections = result.examConfig?.subjects || [];
       
+      // Group questions by part and calculate continuous numbering
       let questionsHtml = '';
+      let globalQuestionNumber = 0;
       
-      for (const part of parts) {
-        const partQuestions = result.questions.filter(q => q.part === part);
+      for (const section of sections) {
+        const partQuestions = result.questions.filter(q => q.part === section.part);
         if (partQuestions.length === 0) continue;
+        
+        const startNumber = globalQuestionNumber + 1;
+        const endNumber = globalQuestionNumber + partQuestions.length;
         
         questionsHtml += `
           <div class="part-section">
-            <h2 class="part-header">Part ${part}: ${SUBJECTS[part]}</h2>
+            <div class="part-header">
+              <span class="part-badge">Part ${section.part}</span>
+              <span class="part-title">${section.name}</span>
+              <span class="part-range">Q.${startNumber} - Q.${endNumber}</span>
+            </div>
             <div class="questions-list">
         `;
         
         for (const question of partQuestions) {
-          const statusClass = question.status === 'correct' ? 'correct' : question.status === 'wrong' ? 'wrong' : 'unattempted';
-          const statusLabel = question.status === 'correct' ? '+2.0' : question.status === 'wrong' ? '-0.5' : '0.0';
+          globalQuestionNumber++;
           
           let optionsHtml = '';
           for (const option of question.options) {
-            let optionClass = '';
-            let labelClass = 'label-default';
+            const isCorrectAnswer = option.isCorrect;
             
-            if (option.isSelected && option.isCorrect) {
-              optionClass = 'option-correct';
-              labelClass = 'label-correct';
-            } else if (option.isSelected && !option.isCorrect) {
-              optionClass = 'option-wrong';
-              labelClass = 'label-wrong';
-            } else if (!option.isSelected && option.isCorrect && question.status !== 'correct') {
-              optionClass = 'option-right-answer';
-              labelClass = 'label-right-answer';
+            // In normal mode: show correct answer highlighted
+            // In quiz mode: hide answer, reveal on click
+            if (mode === 'normal') {
+              const optionClass = isCorrectAnswer ? 'option-correct' : '';
+              const labelClass = isCorrectAnswer ? 'label-correct' : 'label-default';
+              
+              optionsHtml += `
+                <div class="option ${optionClass}">
+                  <span class="option-label ${labelClass}">${option.id}</span>
+                  ${option.imageUrl ? `<img src="${option.imageUrl}" alt="Option ${option.id}" class="option-image" loading="lazy" />` : `<span class="option-text">Option ${option.id}</span>`}
+                </div>
+              `;
+            } else {
+              // Quiz mode - answer hidden initially
+              optionsHtml += `
+                <div class="option quiz-option" data-correct="${isCorrectAnswer}" onclick="revealAnswer(this)">
+                  <span class="option-label label-default">${option.id}</span>
+                  ${option.imageUrl ? `<img src="${option.imageUrl}" alt="Option ${option.id}" class="option-image" loading="lazy" />` : `<span class="option-text">Option ${option.id}</span>`}
+                </div>
+              `;
             }
-            
-            optionsHtml += `
-              <div class="option ${optionClass}">
-                <span class="option-label ${labelClass}">${option.id}</span>
-                <img src="${option.imageUrl}" alt="Option ${option.id}" class="option-image" />
-              </div>
-            `;
           }
           
           questionsHtml += `
             <div class="question">
               <div class="question-header">
-                <span class="question-number">Q.${question.questionNumber}</span>
-                <span class="status-badge status-${statusClass}">${statusLabel}</span>
+                <span class="question-number">Q.${globalQuestionNumber}</span>
               </div>
               <div class="question-image-container">
-                <img src="${question.questionImageUrl}" alt="Question ${question.questionNumber}" class="question-image" />
+                ${question.questionImageUrl ? `<img src="${question.questionImageUrl}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />` : ''}
               </div>
               <div class="options">
                 ${optionsHtml}
               </div>
+              ${mode === 'quiz' ? `<button class="show-answer-btn" onclick="showAnswer(this)">Show Answer</button>` : ''}
             </div>
           `;
         }
@@ -79,13 +86,68 @@ export const useHtmlGenerator = () => {
         `;
       }
 
+      const quizModeScript = mode === 'quiz' ? `
+        <script>
+          function revealAnswer(element) {
+            const isCorrect = element.dataset.correct === 'true';
+            const questionDiv = element.closest('.question');
+            const allOptions = questionDiv.querySelectorAll('.quiz-option');
+            
+            // Show feedback for clicked option
+            if (isCorrect) {
+              element.classList.add('option-correct');
+              element.querySelector('.option-label').classList.remove('label-default');
+              element.querySelector('.option-label').classList.add('label-correct');
+            } else {
+              element.classList.add('option-wrong');
+              element.querySelector('.option-label').classList.remove('label-default');
+              element.querySelector('.option-label').classList.add('label-wrong');
+              
+              // Also highlight the correct answer
+              allOptions.forEach(opt => {
+                if (opt.dataset.correct === 'true') {
+                  opt.classList.add('option-correct');
+                  opt.querySelector('.option-label').classList.remove('label-default');
+                  opt.querySelector('.option-label').classList.add('label-correct');
+                }
+              });
+            }
+            
+            // Disable further clicks
+            allOptions.forEach(opt => {
+              opt.style.pointerEvents = 'none';
+            });
+            
+            // Hide show answer button
+            const btn = questionDiv.querySelector('.show-answer-btn');
+            if (btn) btn.style.display = 'none';
+          }
+          
+          function showAnswer(button) {
+            const questionDiv = button.closest('.question');
+            const allOptions = questionDiv.querySelectorAll('.quiz-option');
+            
+            allOptions.forEach(opt => {
+              if (opt.dataset.correct === 'true') {
+                opt.classList.add('option-correct');
+                opt.querySelector('.option-label').classList.remove('label-default');
+                opt.querySelector('.option-label').classList.add('label-correct');
+              }
+              opt.style.pointerEvents = 'none';
+            });
+            
+            button.style.display = 'none';
+          }
+        </script>
+      ` : '';
+
       const htmlContent = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SSC CGL Response Sheet Analysis - ${result.candidate.name || 'Report'}</title>
+  <title>${examName} - ${mode === 'quiz' ? 'Quiz Mode' : 'Questions'}</title>
   <style>
     * {
       margin: 0;
@@ -95,9 +157,9 @@ export const useHtmlGenerator = () => {
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f8fafc;
+      background: #ffffff;
       color: #1e293b;
-      line-height: 1.5;
+      line-height: 1.6;
     }
     
     .container {
@@ -107,86 +169,28 @@ export const useHtmlGenerator = () => {
     }
     
     .header {
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       color: white;
-      padding: 30px;
+      padding: 24px 30px;
       border-radius: 12px;
       text-align: center;
       margin-bottom: 24px;
     }
     
     .header h1 {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
     
-    .header p {
-      font-size: 14px;
-      opacity: 0.9;
-    }
-    
-    .info-section {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    .info-section h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: #3b82f6;
-    }
-    
-    .info-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-    
-    .info-item {
-      font-size: 13px;
-    }
-    
-    .info-label {
-      color: #64748b;
-    }
-    
-    .info-value {
-      font-weight: 600;
-      color: #1e293b;
-    }
-    
-    .score-summary {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-    
-    .score-box {
-      padding: 16px;
-      border-radius: 10px;
-      text-align: center;
-      color: white;
-    }
-    
-    .score-box.total { background: #3b82f6; }
-    .score-box.correct { background: #22c55e; }
-    .score-box.wrong { background: #ef4444; }
-    .score-box.skipped { background: #9ca3af; }
-    
-    .score-value {
-      font-size: 28px;
-      font-weight: 700;
-    }
-    
-    .score-label {
+    .header .mode-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
       font-size: 12px;
-      opacity: 0.9;
+      font-weight: 500;
+      margin-top: 8px;
     }
     
     .part-section {
@@ -194,25 +198,43 @@ export const useHtmlGenerator = () => {
     }
     
     .part-header {
-      background: #3b82f6;
+      background: linear-gradient(135deg, #1e40af, #3b82f6);
       color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 600;
+      padding: 14px 20px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
       margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    
+    .part-badge {
+      background: rgba(255,255,255,0.2);
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    
+    .part-title {
+      font-size: 15px;
+      font-weight: 600;
+      flex: 1;
+    }
+    
+    .part-range {
+      font-size: 12px;
+      opacity: 0.9;
     }
     
     .questions-list {
       background: white;
-      border-radius: 10px;
-      padding: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
     .question {
-      padding: 16px 0;
-      border-bottom: 1px solid #e2e8f0;
+      padding: 20px 0;
+      border-bottom: 1px solid #e5e7eb;
     }
     
     .question:last-child {
@@ -220,83 +242,69 @@ export const useHtmlGenerator = () => {
     }
     
     .question-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
       margin-bottom: 12px;
     }
     
     .question-number {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 700;
       color: #3b82f6;
     }
     
-    .status-badge {
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    
-    .status-correct {
-      background: #dcfce7;
-      color: #22c55e;
-    }
-    
-    .status-wrong {
-      background: #fee2e2;
-      color: #ef4444;
-    }
-    
-    .status-unattempted {
-      background: #f3f4f6;
-      color: #9ca3af;
-    }
-    
     .question-image-container {
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
     
     .question-image {
       max-width: 100%;
       height: auto;
+      border-radius: 6px;
     }
     
     .options {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
     
     .option {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 8px 12px;
-      border-radius: 6px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    
+    .quiz-option {
+      cursor: pointer;
+    }
+    
+    .quiz-option:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
     }
     
     .option-correct {
-      background: rgba(34, 197, 94, 0.15);
+      background: rgba(34, 197, 94, 0.15) !important;
+      border-color: #22c55e !important;
     }
     
     .option-wrong {
-      background: rgba(239, 68, 68, 0.15);
-    }
-    
-    .option-right-answer {
-      background: rgba(245, 158, 11, 0.15);
+      background: rgba(239, 68, 68, 0.15) !important;
+      border-color: #ef4444 !important;
     }
     
     .option-label {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
       flex-shrink: 0;
     }
@@ -316,131 +324,75 @@ export const useHtmlGenerator = () => {
       color: white;
     }
     
-    .label-right-answer {
-      background: #f59e0b;
-      color: white;
+    .option-image {
+      max-height: 50px;
+      height: auto;
     }
     
-    .option-image {
-      max-height: 40px;
-      height: auto;
+    .option-text {
+      font-size: 14px;
+      color: #64748b;
+    }
+    
+    .show-answer-btn {
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .show-answer-btn:hover {
+      background: #2563eb;
     }
     
     .footer {
       text-align: center;
       padding: 24px;
-      color: #64748b;
-      font-size: 12px;
+      color: #94a3b8;
+      font-size: 11px;
+      border-top: 1px solid #e5e7eb;
+      margin-top: 20px;
     }
-    
-    .legend {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      margin-bottom: 24px;
-      flex-wrap: wrap;
-    }
-    
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: #64748b;
-    }
-    
-    .legend-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-    }
-    
-    .legend-dot.correct { background: #22c55e; }
-    .legend-dot.wrong { background: #ef4444; }
-    .legend-dot.right-answer { background: #f59e0b; }
-    .legend-dot.unattempted { background: #9ca3af; }
     
     @media print {
       body { background: white; }
       .container { max-width: 100%; padding: 10px; }
       .question { page-break-inside: avoid; }
+      .show-answer-btn { display: none; }
+    }
+    
+    @media (max-width: 640px) {
+      .container { padding: 12px; }
+      .header { padding: 16px; }
+      .header h1 { font-size: 18px; }
+      .part-header { padding: 12px 14px; }
+      .part-title { font-size: 13px; }
+      .question { padding: 14px 0; }
+      .option { padding: 8px 10px; gap: 8px; }
+      .option-image { max-height: 40px; }
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>SSC CGL Tier-I Response Sheet Analysis</h1>
-      <p>Generated on ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-    </div>
-    
-    <div class="info-section">
-      <h3>Candidate Information</h3>
-      <div class="info-grid">
-        <div class="info-item">
-          <span class="info-label">Name: </span>
-          <span class="info-value">${result.candidate.name || 'N/A'}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Roll Number: </span>
-          <span class="info-value">${result.candidate.rollNumber || 'N/A'}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Test Date: </span>
-          <span class="info-value">${result.candidate.testDate || 'N/A'}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Shift: </span>
-          <span class="info-value">${result.candidate.shift || 'N/A'}</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="score-summary">
-      <div class="score-box total">
-        <div class="score-value">${result.totalScore}</div>
-        <div class="score-label">/ ${result.maxScore}</div>
-      </div>
-      <div class="score-box correct">
-        <div class="score-value">${result.correctCount}</div>
-        <div class="score-label">Correct</div>
-      </div>
-      <div class="score-box wrong">
-        <div class="score-value">${result.wrongCount}</div>
-        <div class="score-label">Wrong</div>
-      </div>
-      <div class="score-box skipped">
-        <div class="score-value">${result.unattemptedCount}</div>
-        <div class="score-label">Skipped</div>
-      </div>
-    </div>
-    
-    <div class="legend">
-      <div class="legend-item">
-        <div class="legend-dot correct"></div>
-        <span>Correct (+2.0)</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot wrong"></div>
-        <span>Wrong (-0.5)</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot right-answer"></div>
-        <span>Correct Answer</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot unattempted"></div>
-        <span>Unattempted</span>
-      </div>
+      <h1>${examName}</h1>
+      <div class="mode-badge">${mode === 'quiz' ? '🎯 Quiz Mode - Click options to check answers' : '📋 Answer Key'}</div>
     </div>
     
     ${questionsHtml}
     
     <div class="footer">
-      <p>This is an unofficial analysis report generated for personal use only.</p>
-      <p>Not affiliated with Staff Selection Commission.</p>
+      <p>Generated for practice purposes only. Not affiliated with any official examination body.</p>
     </div>
   </div>
+  ${quizModeScript}
 </body>
 </html>
       `;
@@ -450,7 +402,8 @@ export const useHtmlGenerator = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SSC_CGL_Analysis_${result.candidate.rollNumber || 'Report'}_${new Date().toISOString().split('T')[0]}.html`;
+      const modeLabel = mode === 'quiz' ? 'Quiz' : 'AnswerKey';
+      a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${new Date().toISOString().split('T')[0]}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
