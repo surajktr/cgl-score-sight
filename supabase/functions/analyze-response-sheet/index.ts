@@ -348,8 +348,44 @@ function parseQuestionsForPart(
 
       if (!foundQuestionRow) continue;
 
-      const imgMatch = rowContent.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-      if (!imgMatch) continue;
+      // Extract ALL images from this option row (there may be multiple for different languages)
+      const allImgMatches = rowContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
+      const imageUrls: string[] = [];
+
+      for (const imgMatch of allImgMatches) {
+        let imgUrl = imgMatch[1];
+        if (imgUrl && !imgUrl.startsWith('http')) {
+          imgUrl = baseDir + imgUrl;
+        }
+        imageUrls.push(imgUrl);
+      }
+
+      // If no images found, skip this row
+      if (imageUrls.length === 0) continue;
+
+      // Determine which image is Hindi and which is English
+      let hindiUrl = '';
+      let englishUrl = '';
+      let defaultUrl = imageUrls[0]; // Fallback to first image
+
+      for (const url of imageUrls) {
+        if (/_HI\.(jpg|jpeg|png|gif)/i.test(url)) {
+          hindiUrl = url;
+        } else if (/_EN\.(jpg|jpeg|png|gif)/i.test(url)) {
+          englishUrl = url;
+        }
+      }
+
+      // If we didn't find language-specific URLs, use the default and try getLanguageUrls
+      if (!hindiUrl && !englishUrl) {
+        const langUrls = getLanguageUrls(defaultUrl);
+        hindiUrl = langUrls.hindi || defaultUrl;
+        englishUrl = langUrls.english || defaultUrl;
+      } else {
+        // If we found one but not the other, set the missing one to the default
+        if (!hindiUrl) hindiUrl = englishUrl || defaultUrl;
+        if (!englishUrl) englishUrl = hindiUrl || defaultUrl;
+      }
 
       let bgcolor = rowBgcolor;
       if (!bgcolor) {
@@ -366,31 +402,19 @@ function parseQuestionsForPart(
       const isCorrect = isGreen || isYellow;
       const isSelected = isGreen || isRed;
 
-      let optionImageUrl = imgMatch[1];
-      if (optionImageUrl && !optionImageUrl.startsWith('http')) {
-        optionImageUrl = baseDir + optionImageUrl;
-      }
-
-      // Get Hindi and English URLs for option image
-      const optionLangUrls = getLanguageUrls(optionImageUrl);
-
-      // Ensure we always have valid URLs - default to the original optionImageUrl if not set
-      const finalHindiUrl = optionLangUrls.hindi || optionImageUrl;
-      const finalEnglishUrl = optionLangUrls.english || optionImageUrl;
-
       // Debug logging
       console.log(`Part ${part}, Q${qNum}, Option ${optionIds[optIdx]}:`, {
-        original: optionImageUrl,
-        hindiUrl: finalHindiUrl,
-        englishUrl: finalEnglishUrl,
-        fromGetLanguageUrls: optionLangUrls
+        defaultUrl: defaultUrl,
+        hindiUrl: hindiUrl,
+        englishUrl: englishUrl,
+        allFoundUrls: imageUrls
       });
 
       options.push({
         id: optionIds[optIdx],
-        imageUrl: optionImageUrl,
-        imageUrlHindi: finalHindiUrl,
-        imageUrlEnglish: finalEnglishUrl,
+        imageUrl: defaultUrl,
+        imageUrlHindi: hindiUrl,
+        imageUrlEnglish: englishUrl,
         isSelected,
         isCorrect,
       });
@@ -428,6 +452,13 @@ function parseQuestionsForPart(
           : 0;
 
       const actualQuestionNumber = questionOffset + qNum;
+
+      // Debug logging for question
+      console.log(`Part ${part}, Q${qNum}:`, {
+        original: questionImageUrl,
+        hindiUrl: finalQuestionHindiUrl,
+        englishUrl: finalQuestionEnglishUrl
+      });
 
       questions.push({
         questionNumber: actualQuestionNumber,
