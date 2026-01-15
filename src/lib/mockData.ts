@@ -14,9 +14,13 @@ export interface QuestionData {
   part: string;
   subject: string;
   questionImageUrl: string;
+  questionImageUrlHindi?: string;
+  questionImageUrlEnglish?: string;
   options: {
     id: string;
     imageUrl: string;
+    imageUrlHindi?: string;
+    imageUrlEnglish?: string;
     isSelected: boolean;
     isCorrect: boolean;
   }[];

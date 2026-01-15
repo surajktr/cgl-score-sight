@@ -19,9 +19,13 @@ interface QuestionData {
   part: string;
   subject: string;
   questionImageUrl: string;
+  questionImageUrlHindi?: string;
+  questionImageUrlEnglish?: string;
   options: {
     id: string;
     imageUrl: string;
+    imageUrlHindi?: string;
+    imageUrlEnglish?: string;
     isSelected: boolean;
     isCorrect: boolean;
   }[];
@@ -260,6 +264,43 @@ function parseQuestionsForPart(
   const lastSlashIndex = urlParts.lastIndexOf('/');
   const baseDir = urlParts.substring(0, lastSlashIndex + 1);
   
+  // Helper function to get both Hindi and English image URLs
+  const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
+    if (!imageUrl) return {};
+    
+    // Check if URL contains language suffix (_HI or _EN)
+    const isHindi = imageUrl.includes('_HI.jpg') || imageUrl.includes('_HI.png') || imageUrl.includes('_HI.jpeg');
+    const isEnglish = imageUrl.includes('_EN.jpg') || imageUrl.includes('_EN.png') || imageUrl.includes('_EN.jpeg');
+    
+    let hindiUrl = imageUrl;
+    let englishUrl = imageUrl;
+    
+    if (isHindi) {
+      // Current URL is Hindi, generate English URL
+      englishUrl = imageUrl.replace('_HI.jpg', '_EN.jpg')
+                           .replace('_HI.png', '_EN.png')
+                           .replace('_HI.jpeg', '_EN.jpeg');
+    } else if (isEnglish) {
+      // Current URL is English, generate Hindi URL
+      hindiUrl = imageUrl.replace('_EN.jpg', '_HI.jpg')
+                          .replace('_EN.png', '_HI.png')
+                          .replace('_EN.jpeg', '_HI.jpeg');
+    } else {
+      // No language suffix detected, try to create both versions
+      // Look for pattern like .jpg and add suffix before extension
+      const extensionMatch = imageUrl.match(/\.(jpg|jpeg|png|gif)(\?.*)?$/i);
+      if (extensionMatch) {
+        const ext = extensionMatch[1];
+        const queryString = extensionMatch[2] || '';
+        const basePath = imageUrl.substring(0, imageUrl.lastIndexOf('.' + ext));
+        hindiUrl = basePath + '_HI.' + ext + queryString;
+        englishUrl = basePath + '_EN.' + ext + queryString;
+      }
+    }
+    
+    return { hindi: hindiUrl, english: englishUrl };
+  };
+  
   const questionTablePattern = /<table[^>]*>[\s\S]*?Q\.No:\s*&nbsp;(\d+)[\s\S]*?<\/table>/gi;
   let tableMatch;
   
@@ -274,6 +315,9 @@ function parseQuestionsForPart(
     if (questionImageUrl && !questionImageUrl.startsWith('http')) {
       questionImageUrl = baseDir + questionImageUrl;
     }
+    
+    // Get Hindi and English URLs for question image
+    const questionLangUrls = getLanguageUrls(questionImageUrl);
     
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
@@ -317,9 +361,14 @@ function parseQuestionsForPart(
         optionImageUrl = baseDir + optionImageUrl;
       }
       
+      // Get Hindi and English URLs for option image
+      const optionLangUrls = getLanguageUrls(optionImageUrl);
+      
       options.push({
         id: optionIds[optIdx],
         imageUrl: optionImageUrl,
+        imageUrlHindi: optionLangUrls.hindi,
+        imageUrlEnglish: optionLangUrls.english,
         isSelected,
         isCorrect,
       });
@@ -363,6 +412,8 @@ function parseQuestionsForPart(
         part,
         subject: subject.name,
         questionImageUrl,
+        questionImageUrlHindi: questionLangUrls.hindi,
+        questionImageUrlEnglish: questionLangUrls.english,
         options,
         status,
         marksAwarded,
@@ -372,7 +423,6 @@ function parseQuestionsForPart(
   
   return questions;
 }
-
 // Calculate section-wise breakdown
 function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
   const sections: SectionData[] = [];
