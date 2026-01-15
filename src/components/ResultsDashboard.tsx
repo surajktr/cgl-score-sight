@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CandidateInfoCard } from './CandidateInfoCard';
 import { ScoreSummaryCard } from './ScoreSummaryCard';
 import { SectionBreakdown } from './SectionBreakdown';
-import { QuestionsTable } from './QuestionsTable';
+import { QuestionsTable, type DisplayLanguage } from './QuestionsTable';
 import { Download, ArrowLeft, Printer, Loader2 } from 'lucide-react';
 import type { AnalysisResult } from '@/lib/mockData';
 import { usePdfGenerator } from '@/hooks/usePdfGenerator';
@@ -17,6 +18,7 @@ interface ResultsDashboardProps {
 export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
   const { generatePdf, isGenerating, progress } = usePdfGenerator();
   const { toast } = useToast();
+  const [displayLanguage, setDisplayLanguage] = useState<DisplayLanguage>('hindi');
 
   const handleDownloadPdf = async () => {
     try {
@@ -121,7 +123,12 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
           <SectionBreakdown sections={result.sections} maxScore={result.maxScore} />
 
           {/* Questions Table */}
-          <QuestionsTable questions={result.questions} result={result} />
+          <QuestionsTable 
+            questions={result.questions} 
+            result={result} 
+            displayLanguage={displayLanguage}
+            onLanguageChange={setDisplayLanguage}
+          />
         </div>
       </main>
     </div>

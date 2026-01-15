@@ -1,10 +1,12 @@
 import type { QuestionData } from '@/lib/mockData';
+import type { DisplayLanguage } from './QuestionsTable';
 
 interface QuestionCardProps {
   question: QuestionData;
+  displayLanguage?: DisplayLanguage;
 }
 
-export const QuestionCard = ({ question }: QuestionCardProps) => {
+export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCardProps) => {
   const getStatusBadge = () => {
     switch (question.status) {
       case 'correct':
@@ -57,6 +59,27 @@ export const QuestionCard = ({ question }: QuestionCardProps) => {
     return 'bg-muted text-foreground';
   };
 
+  // Get the correct image URL based on display language
+  const getQuestionImage = () => {
+    if (displayLanguage === 'hindi' && question.questionImageUrlHindi) {
+      return question.questionImageUrlHindi;
+    }
+    if (displayLanguage === 'english' && question.questionImageUrlEnglish) {
+      return question.questionImageUrlEnglish;
+    }
+    return question.questionImageUrl;
+  };
+
+  const getOptionImage = (option: QuestionData['options'][0]) => {
+    if (displayLanguage === 'hindi' && option.imageUrlHindi) {
+      return option.imageUrlHindi;
+    }
+    if (displayLanguage === 'english' && option.imageUrlEnglish) {
+      return option.imageUrlEnglish;
+    }
+    return option.imageUrl;
+  };
+
   return (
     <div className="py-4">
       {/* Header */}
@@ -72,7 +95,7 @@ export const QuestionCard = ({ question }: QuestionCardProps) => {
       {/* Question Image */}
       <div className="mb-3">
         <img 
-          src={question.questionImageUrl} 
+          src={getQuestionImage()} 
           alt={`Question ${question.questionNumber}`}
           className="max-w-full h-auto"
           loading="lazy"
@@ -90,7 +113,7 @@ export const QuestionCard = ({ question }: QuestionCardProps) => {
               {option.id}
             </span>
             <img 
-              src={option.imageUrl}
+              src={getOptionImage(option)}
               alt={`Option ${option.id}`}
               className="max-h-10 h-auto"
               loading="lazy"
