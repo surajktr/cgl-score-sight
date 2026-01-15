@@ -199,13 +199,13 @@ const EXAM_CONFIGS: Record<string, ExamConfig> = {
 // Generate URLs for all parts based on exam config
 function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: string; url: string; subject: SubjectConfig }[] {
   const parts: { part: string; url: string; subject: SubjectConfig }[] = [];
-  
+
   const urlParts = inputUrl.split('?');
   const queryString = urlParts[1] || '';
   const basePath = urlParts[0];
   const lastSlashIndex = basePath.lastIndexOf('/');
   const baseDir = basePath.substring(0, lastSlashIndex + 1);
-  
+
   // Map parts to file names
   const partFileMap: Record<string, string> = {
     'A': 'ViewCandResponse.aspx',
@@ -214,7 +214,7 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
     'D': 'ViewCandResponse4.aspx',
     'E': 'ViewCandResponse5.aspx',
   };
-  
+
   for (const subject of examConfig.subjects) {
     const file = partFileMap[subject.part];
     if (file) {
@@ -222,7 +222,7 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
       parts.push({ part: subject.part, url, subject });
     }
   }
-  
+
   return parts;
 }
 
@@ -252,41 +252,41 @@ function parseCandidateInfo(html: string): CandidateInfo {
 
 // Parse questions from HTML for a specific part
 function parseQuestionsForPart(
-  html: string, 
-  part: string, 
-  baseUrl: string, 
+  html: string,
+  part: string,
+  baseUrl: string,
   subject: SubjectConfig,
   questionOffset: number
 ): QuestionData[] {
   const questions: QuestionData[] = [];
-  
+
   const urlParts = baseUrl.split('?')[0];
   const lastSlashIndex = urlParts.lastIndexOf('/');
   const baseDir = urlParts.substring(0, lastSlashIndex + 1);
-  
+
   // Helper function to get both Hindi and English image URLs
   const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
     if (!imageUrl) return {};
-    
+
     // Check if URL contains language suffix (_HI or _EN) - handle query params
     const isHindi = /_HI\.(jpg|jpeg|png|gif)/i.test(imageUrl);
     const isEnglish = /_EN\.(jpg|jpeg|png|gif)/i.test(imageUrl);
-    
+
     let hindiUrl = imageUrl;
     let englishUrl = imageUrl;
-    
+
     if (isHindi) {
       // Current URL is Hindi, generate English URL
       englishUrl = imageUrl.replace(/_HI\.(jpg)/i, '_EN.$1')
-                           .replace(/_HI\.(jpeg)/i, '_EN.$1')
-                           .replace(/_HI\.(png)/i, '_EN.$1')
-                           .replace(/_HI\.(gif)/i, '_EN.$1');
+        .replace(/_HI\.(jpeg)/i, '_EN.$1')
+        .replace(/_HI\.(png)/i, '_EN.$1')
+        .replace(/_HI\.(gif)/i, '_EN.$1');
     } else if (isEnglish) {
       // Current URL is English, generate Hindi URL
       hindiUrl = imageUrl.replace(/_EN\.(jpg)/i, '_HI.$1')
-                          .replace(/_EN\.(jpeg)/i, '_HI.$1')
-                          .replace(/_EN\.(png)/i, '_HI.$1')
-                          .replace(/_EN\.(gif)/i, '_HI.$1');
+        .replace(/_EN\.(jpeg)/i, '_HI.$1')
+        .replace(/_EN\.(png)/i, '_HI.$1')
+        .replace(/_EN\.(gif)/i, '_HI.$1');
     } else {
       // No language suffix detected, try to create both versions
       // Look for pattern like .jpg (with optional query string) and add suffix before extension
@@ -303,50 +303,50 @@ function parseQuestionsForPart(
         }
       }
     }
-    
+
     return { hindi: hindiUrl, english: englishUrl };
   };
-  
+
   const questionTablePattern = /<table[^>]*>[\s\S]*?Q\.No:\s*&nbsp;(\d+)[\s\S]*?<\/table>/gi;
   let tableMatch;
-  
+
   while ((tableMatch = questionTablePattern.exec(html)) !== null) {
     const qNum = parseInt(tableMatch[1]);
     const tableContent = tableMatch[0];
-    
+
     const qImgPattern = /Q\.No:\s*&nbsp;\d+<\/font><\/td><td[^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i;
     const qImgMatch = tableContent.match(qImgPattern);
     let questionImageUrl = qImgMatch ? qImgMatch[1] : '';
-    
+
     if (questionImageUrl && !questionImageUrl.startsWith('http')) {
       questionImageUrl = baseDir + questionImageUrl;
     }
-    
+
     // Get Hindi and English URLs for question image
     const questionLangUrls = getLanguageUrls(questionImageUrl);
-    
+
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
-    
+
     const optionRowPattern = /<tr[^>]*(?:bgcolor\s*=\s*["']([^"']+)["'])?[^>]*>([\s\S]*?)<\/tr>/gi;
     let optionMatch;
     let optIdx = 0;
     let foundQuestionRow = false;
-    
+
     while ((optionMatch = optionRowPattern.exec(tableContent)) !== null && optIdx < 4) {
       const rowBgcolor = (optionMatch[1] || '').toLowerCase();
       const rowContent = optionMatch[2];
-      
+
       if (rowContent.includes('Q.No:')) {
         foundQuestionRow = true;
         continue;
       }
-      
+
       if (!foundQuestionRow) continue;
-      
+
       const imgMatch = rowContent.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
       if (!imgMatch) continue;
-      
+
       let bgcolor = rowBgcolor;
       if (!bgcolor) {
         const tdBgMatch = rowContent.match(/bgcolor\s*=\s*["']([^"']+)["']/i);
@@ -354,22 +354,22 @@ function parseQuestionsForPart(
           bgcolor = tdBgMatch[1].toLowerCase();
         }
       }
-      
+
       const isGreen = bgcolor.includes('green');
       const isRed = bgcolor.includes('red');
       const isYellow = bgcolor.includes('yellow');
-      
+
       const isCorrect = isGreen || isYellow;
       const isSelected = isGreen || isRed;
-      
+
       let optionImageUrl = imgMatch[1];
       if (optionImageUrl && !optionImageUrl.startsWith('http')) {
         optionImageUrl = baseDir + optionImageUrl;
       }
-      
+
       // Get Hindi and English URLs for option image
       const optionLangUrls = getLanguageUrls(optionImageUrl);
-      
+
       options.push({
         id: optionIds[optIdx],
         imageUrl: optionImageUrl,
@@ -378,10 +378,10 @@ function parseQuestionsForPart(
         isSelected,
         isCorrect,
       });
-      
+
       optIdx++;
     }
-    
+
     if (options.length >= 2) {
       while (options.length < 4) {
         options.push({
@@ -391,11 +391,11 @@ function parseQuestionsForPart(
           isCorrect: false,
         });
       }
-      
+
       let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
       const hasSelected = options.some(o => o.isSelected);
       const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
-      
+
       if (!hasSelected) {
         status = 'unattempted';
       } else if (selectedIsCorrect) {
@@ -403,16 +403,16 @@ function parseQuestionsForPart(
       } else {
         status = 'wrong';
       }
-      
+
       // Calculate marks based on exam-specific marking scheme
-      const marksAwarded = status === 'correct' 
-        ? subject.correctMarks 
-        : status === 'wrong' 
-          ? -subject.negativeMarks 
+      const marksAwarded = status === 'correct'
+        ? subject.correctMarks
+        : status === 'wrong'
+          ? -subject.negativeMarks
           : 0;
-      
+
       const actualQuestionNumber = questionOffset + qNum;
-      
+
       questions.push({
         questionNumber: actualQuestionNumber,
         part,
@@ -426,20 +426,20 @@ function parseQuestionsForPart(
       });
     }
   }
-  
+
   return questions;
 }
 // Calculate section-wise breakdown
 function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
   const sections: SectionData[] = [];
-  
+
   for (const subject of examConfig.subjects) {
     const partQuestions = questions.filter(q => q.part === subject.part);
     const correct = partQuestions.filter(q => q.status === 'correct').length;
     const wrong = partQuestions.filter(q => q.status === 'wrong').length;
     const unattempted = partQuestions.filter(q => q.status === 'unattempted').length;
     const score = correct * subject.correctMarks - wrong * subject.negativeMarks;
-    
+
     sections.push({
       part: subject.part,
       subject: subject.name,
@@ -453,7 +453,7 @@ function calculateSections(questions: QuestionData[], examConfig: ExamConfig): S
       isQualifying: subject.isQualifying,
     });
   }
-  
+
   return sections;
 }
 
@@ -509,7 +509,7 @@ serve(async (req) => {
     // Fetch all parts in parallel
     const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
       console.log(`Scraping Part ${part}:`, partUrl);
-      
+
       try {
         const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
           method: 'POST',
@@ -549,7 +549,7 @@ serve(async (req) => {
     // Collect all questions and candidate info
     for (const result of results) {
       allQuestions = allQuestions.concat(result.questions);
-      
+
       if (!candidate && result.html) {
         candidate = parseCandidateInfo(result.html);
       }
@@ -562,9 +562,9 @@ serve(async (req) => {
 
     if (allQuestions.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Could not parse questions from the response sheet. The URL may not be a valid response sheet, or the format may have changed.' 
+        JSON.stringify({
+          success: false,
+          error: 'Could not parse questions from the response sheet. The URL may not be a valid response sheet, or the format may have changed.'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -584,13 +584,13 @@ serve(async (req) => {
 
     // Calculate sections
     const sections = calculateSections(allQuestions, examConfig);
-    
+
     // Calculate totals
     const correctCount = allQuestions.filter(q => q.status === 'correct').length;
     const wrongCount = allQuestions.filter(q => q.status === 'wrong').length;
     const unattemptedCount = allQuestions.filter(q => q.status === 'unattempted').length;
     const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
-    
+
     const analysisResult: AnalysisResult = {
       candidate,
       examType,
@@ -616,9 +616,9 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error analyzing response sheet:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'An unexpected error occurred' 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : 'An unexpected error occurred'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
