@@ -1,17 +1,50 @@
 import { useState, useCallback } from 'react';
 import type { AnalysisResult } from '@/lib/mockData';
+import type { DownloadLanguage } from '@/components/DownloadLanguageDialog';
 
 export type HtmlMode = 'normal' | 'quiz';
 
 export const useHtmlGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const generateHtml = useCallback(async (result: AnalysisResult, mode: HtmlMode = 'normal') => {
+  const generateHtml = useCallback(async (
+    result: AnalysisResult, 
+    mode: HtmlMode = 'normal',
+    downloadLanguage: DownloadLanguage = 'hindi'
+  ) => {
     setIsGenerating(true);
 
     try {
       const examName = result.examConfig?.name || 'SSC Exam';
       const sections = result.examConfig?.subjects || [];
+      const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                           downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      
+      // Helper function to get correct image URL based on language preference
+      const getQuestionImageUrl = (question: typeof result.questions[0]) => {
+        if (downloadLanguage === 'bilingual') {
+          // Return both images if available
+          const hindiImg = question.questionImageUrlHindi || question.questionImageUrl;
+          const englishImg = question.questionImageUrlEnglish || question.questionImageUrl;
+          return { hindi: hindiImg, english: englishImg, bilingual: true };
+        } else if (downloadLanguage === 'hindi') {
+          return { single: question.questionImageUrlHindi || question.questionImageUrl, bilingual: false };
+        } else {
+          return { single: question.questionImageUrlEnglish || question.questionImageUrl, bilingual: false };
+        }
+      };
+
+      const getOptionImageUrl = (option: typeof result.questions[0]['options'][0]) => {
+        if (downloadLanguage === 'bilingual') {
+          const hindiImg = option.imageUrlHindi || option.imageUrl;
+          const englishImg = option.imageUrlEnglish || option.imageUrl;
+          return { hindi: hindiImg, english: englishImg, bilingual: true };
+        } else if (downloadLanguage === 'hindi') {
+          return { single: option.imageUrlHindi || option.imageUrl, bilingual: false };
+        } else {
+          return { single: option.imageUrlEnglish || option.imageUrl, bilingual: false };
+        }
+      };
       
       // Group questions by part and calculate continuous numbering
       let questionsHtml = '';
@@ -37,9 +70,27 @@ export const useHtmlGenerator = () => {
         for (const question of partQuestions) {
           globalQuestionNumber++;
           
+          const questionImg = getQuestionImageUrl(question);
+          
           let optionsHtml = '';
           for (const option of question.options) {
             const isCorrectAnswer = option.isCorrect;
+            const optionImg = getOptionImageUrl(option);
+            
+            // Build option image HTML based on language
+            let optionImageHtml = '';
+            if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg) {
+              optionImageHtml = `
+                <div class="option-images bilingual">
+                  ${optionImg.hindi ? `<img src="${optionImg.hindi}" alt="Option ${option.id} (Hindi)" class="option-image" loading="lazy" />` : ''}
+                  ${optionImg.english ? `<img src="${optionImg.english}" alt="Option ${option.id} (English)" class="option-image" loading="lazy" />` : ''}
+                </div>
+              `;
+            } else if ('single' in optionImg && optionImg.single) {
+              optionImageHtml = `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
+            } else {
+              optionImageHtml = `<span class="option-text">Option ${option.id}</span>`;
+            }
             
             // In normal mode: show correct answer highlighted
             // In quiz mode: hide answer, reveal on click
@@ -50,7 +101,7 @@ export const useHtmlGenerator = () => {
               optionsHtml += `
                 <div class="option ${optionClass}">
                   <span class="option-label ${labelClass}">${option.id}</span>
-                  ${option.imageUrl ? `<img src="${option.imageUrl}" alt="Option ${option.id}" class="option-image" loading="lazy" />` : `<span class="option-text">Option ${option.id}</span>`}
+                  ${optionImageHtml}
                 </div>
               `;
             } else {
@@ -58,10 +109,23 @@ export const useHtmlGenerator = () => {
               optionsHtml += `
                 <div class="option quiz-option" data-correct="${isCorrectAnswer}" onclick="revealAnswer(this)">
                   <span class="option-label label-default">${option.id}</span>
-                  ${option.imageUrl ? `<img src="${option.imageUrl}" alt="Option ${option.id}" class="option-image" loading="lazy" />` : `<span class="option-text">Option ${option.id}</span>`}
+                  ${optionImageHtml}
                 </div>
               `;
             }
+          }
+          
+          // Build question image HTML based on language
+          let questionImageHtml = '';
+          if (questionImg.bilingual && 'hindi' in questionImg && 'english' in questionImg) {
+            questionImageHtml = `
+              <div class="question-images bilingual">
+                ${questionImg.hindi ? `<div class="lang-section"><span class="lang-label">हिंदी</span><img src="${questionImg.hindi}" alt="Question ${globalQuestionNumber} (Hindi)" class="question-image" loading="lazy" /></div>` : ''}
+                ${questionImg.english ? `<div class="lang-section"><span class="lang-label">English</span><img src="${questionImg.english}" alt="Question ${globalQuestionNumber} (English)" class="question-image" loading="lazy" /></div>` : ''}
+              </div>
+            `;
+          } else if ('single' in questionImg && questionImg.single) {
+            questionImageHtml = `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
           }
           
           questionsHtml += `
@@ -70,7 +134,7 @@ export const useHtmlGenerator = () => {
                 <span class="question-number">Q.${globalQuestionNumber}</span>
               </div>
               <div class="question-image-container">
-                ${question.questionImageUrl ? `<img src="${question.questionImageUrl}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />` : ''}
+                ${questionImageHtml}
               </div>
               <div class="options">
                 ${optionsHtml}
@@ -360,6 +424,43 @@ export const useHtmlGenerator = () => {
       margin-top: 20px;
     }
     
+    /* Bilingual styles */
+    .question-images.bilingual {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .lang-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+    
+    .lang-label {
+      display: inline-block;
+      background: #3b82f6;
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    
+    .option-images.bilingual {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .option-images.bilingual .option-image {
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 2px;
+    }
+    
     @media print {
       body { background: white; }
       .container { max-width: 100%; padding: 10px; }
@@ -376,6 +477,7 @@ export const useHtmlGenerator = () => {
       .question { padding: 14px 0; }
       .option { padding: 8px 10px; gap: 8px; }
       .option-image { max-height: 40px; }
+      .option-images.bilingual { flex-direction: column; }
     }
   </style>
 </head>
@@ -383,7 +485,7 @@ export const useHtmlGenerator = () => {
   <div class="container">
     <div class="header">
       <h1>${examName}</h1>
-      <div class="mode-badge">${mode === 'quiz' ? '🎯 Quiz Mode - Click options to check answers' : '📋 Answer Key'}</div>
+      <div class="mode-badge">${mode === 'quiz' ? '🎯 Quiz Mode - Click options to check answers' : '📋 Answer Key'} • ${languageLabel}</div>
     </div>
     
     ${questionsHtml}
@@ -403,7 +505,9 @@ export const useHtmlGenerator = () => {
       const a = document.createElement('a');
       a.href = url;
       const modeLabel = mode === 'quiz' ? 'Quiz' : 'AnswerKey';
-      a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${new Date().toISOString().split('T')[0]}.html`;
+      const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${langSuffix}_${new Date().toISOString().split('T')[0]}.html`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

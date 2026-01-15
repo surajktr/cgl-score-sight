@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { DownloadLanguageDialog, type DownloadLanguage } from './DownloadLanguageDialog';
 
 interface QuestionsTableProps {
   questions: QuestionData[];
@@ -25,6 +26,8 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const { generateHtml, isGenerating } = useHtmlGenerator();
   const { toast } = useToast();
+  const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
+  const [pendingDownloadMode, setPendingDownloadMode] = useState<HtmlMode>('normal');
 
   // Get unique parts from questions
   const availableParts = [...new Set(questions.map(q => q.part))].sort();
@@ -43,13 +46,19 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
     }).length;
   };
 
-  const handleDownloadHtml = async (mode: HtmlMode) => {
+  const handleDownloadClick = (mode: HtmlMode) => {
+    if (!result) return;
+    setPendingDownloadMode(mode);
+    setLanguageDialogOpen(true);
+  };
+
+  const handleDownloadConfirm = async (downloadLanguage: DownloadLanguage) => {
     if (!result) return;
     try {
-      await generateHtml(result, mode);
+      await generateHtml(result, pendingDownloadMode, downloadLanguage);
       toast({
-        title: mode === 'quiz' ? "Quiz Downloaded" : "Answer Key Downloaded",
-        description: mode === 'quiz' 
+        title: pendingDownloadMode === 'quiz' ? "Quiz Downloaded" : "Answer Key Downloaded",
+        description: pendingDownloadMode === 'quiz' 
           ? "Interactive quiz file has been downloaded." 
           : "Complete answer key has been downloaded.",
       });
@@ -118,14 +127,14 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => handleDownloadHtml('normal')} className="gap-2 cursor-pointer">
+                <DropdownMenuItem onClick={() => handleDownloadClick('normal')} className="gap-2 cursor-pointer">
                   <BookOpen className="h-4 w-4" />
                   <div>
                     <div className="font-medium">Normal Mode</div>
                     <div className="text-xs text-muted-foreground">With answers visible</div>
                   </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDownloadHtml('quiz')} className="gap-2 cursor-pointer">
+                <DropdownMenuItem onClick={() => handleDownloadClick('quiz')} className="gap-2 cursor-pointer">
                   <Gamepad2 className="h-4 w-4" />
                   <div>
                     <div className="font-medium">Quiz Mode</div>
@@ -138,6 +147,12 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
         </div>
       </div>
 
+      <DownloadLanguageDialog
+        open={languageDialogOpen}
+        onOpenChange={setLanguageDialogOpen}
+        onConfirm={handleDownloadConfirm}
+        mode={pendingDownloadMode}
+      />
       <Tabs value={partFilter} onValueChange={setPartFilter}>
         <TabsList className="w-full justify-start mb-6 bg-muted/50 p-1 h-auto flex-wrap gap-1">
           <TabsTrigger 
