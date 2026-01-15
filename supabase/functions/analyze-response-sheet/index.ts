@@ -258,6 +258,7 @@ function parseQuestionsForPart(
   subject: SubjectConfig,
   questionOffset: number
 ): QuestionData[] {
+  console.log('=== PARSER VERSION 2.0 - Multi-image extraction enabled ===');
   const questions: QuestionData[] = [];
 
   const urlParts = baseUrl.split('?')[0];
@@ -435,6 +436,8 @@ function parseQuestionsForPart(
         options.push({
           id: optionIds[options.length],
           imageUrl: '',
+          imageUrlHindi: '',
+          imageUrlEnglish: '',
           isSelected: false,
           isCorrect: false,
         });
@@ -479,6 +482,13 @@ function parseQuestionsForPart(
         status,
         marksAwarded,
       });
+
+      // Debug: Log final options for this question
+      console.log(`FINAL Q${actualQuestionNumber} options:`, options.map(o => ({
+        id: o.id,
+        hindi: o.imageUrlHindi?.substring(0, 50) + '...',
+        english: o.imageUrlEnglish?.substring(0, 50) + '...'
+      })));
     }
   }
 
