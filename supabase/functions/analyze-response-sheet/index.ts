@@ -325,6 +325,10 @@ function parseQuestionsForPart(
     // Get Hindi and English URLs for question image
     const questionLangUrls = getLanguageUrls(questionImageUrl);
 
+    // Ensure we always have valid URLs
+    const finalQuestionHindiUrl = questionLangUrls.hindi || questionImageUrl;
+    const finalQuestionEnglishUrl = questionLangUrls.english || questionImageUrl;
+
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
 
@@ -370,11 +374,23 @@ function parseQuestionsForPart(
       // Get Hindi and English URLs for option image
       const optionLangUrls = getLanguageUrls(optionImageUrl);
 
+      // Ensure we always have valid URLs - default to the original optionImageUrl if not set
+      const finalHindiUrl = optionLangUrls.hindi || optionImageUrl;
+      const finalEnglishUrl = optionLangUrls.english || optionImageUrl;
+
+      // Debug logging
+      console.log(`Part ${part}, Q${qNum}, Option ${optionIds[optIdx]}:`, {
+        original: optionImageUrl,
+        hindiUrl: finalHindiUrl,
+        englishUrl: finalEnglishUrl,
+        fromGetLanguageUrls: optionLangUrls
+      });
+
       options.push({
         id: optionIds[optIdx],
         imageUrl: optionImageUrl,
-        imageUrlHindi: optionLangUrls.hindi,
-        imageUrlEnglish: optionLangUrls.english,
+        imageUrlHindi: finalHindiUrl,
+        imageUrlEnglish: finalEnglishUrl,
         isSelected,
         isCorrect,
       });
@@ -418,8 +434,8 @@ function parseQuestionsForPart(
         part,
         subject: subject.name,
         questionImageUrl,
-        questionImageUrlHindi: questionLangUrls.hindi,
-        questionImageUrlEnglish: questionLangUrls.english,
+        questionImageUrlHindi: finalQuestionHindiUrl,
+        questionImageUrlEnglish: finalQuestionEnglishUrl,
         options,
         status,
         marksAwarded,
