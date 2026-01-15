@@ -348,16 +348,24 @@ function parseQuestionsForPart(
 
       if (!foundQuestionRow) continue;
 
-      // Extract ALL images from this option row (there may be multiple for different languages)
-      const allImgMatches = rowContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
+      // Extract ALL images from this option row using exec loop for better compatibility
+      const imgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["']/gi;
       const imageUrls: string[] = [];
+      let match;
 
-      for (const imgMatch of allImgMatches) {
-        let imgUrl = imgMatch[1];
+      while ((match = imgRegex.exec(rowContent)) !== null) {
+        let imgUrl = match[1];
         if (imgUrl && !imgUrl.startsWith('http')) {
           imgUrl = baseDir + imgUrl;
         }
         imageUrls.push(imgUrl);
+      }
+
+      // Debug log to see what we found
+      if (imageUrls.length === 0) {
+        console.log(`Part ${part}, Q${qNum}, Row ${optIdx}: No images found in row content. Length: ${rowContent.length}`);
+      } else {
+        console.log(`Part ${part}, Q${qNum}, Row ${optIdx}: Found ${imageUrls.length} images:`, imageUrls);
       }
 
       // If no images found, skip this row
