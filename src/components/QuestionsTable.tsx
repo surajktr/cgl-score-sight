@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { QuestionCard } from './QuestionCard';
 import type { AnalysisResult, QuestionData } from '@/lib/mockData';
-import { FileText, Filter, Download, Loader2, BookOpen, Gamepad2 } from 'lucide-react';
+import { FileText, Filter, Download, Loader2, BookOpen, Gamepad2, Languages } from 'lucide-react';
 import { useHtmlGenerator, type HtmlMode } from '@/hooks/useHtmlGenerator';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -14,14 +14,18 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { DownloadLanguageDialog, type DownloadLanguage } from './DownloadLanguageDialog';
 
+export type DisplayLanguage = 'english' | 'hindi';
+
 interface QuestionsTableProps {
   questions: QuestionData[];
   result?: AnalysisResult;
+  displayLanguage?: DisplayLanguage;
+  onLanguageChange?: (lang: DisplayLanguage) => void;
 }
 
 type StatusFilter = 'all' | 'correct' | 'wrong' | 'unattempted';
 
-export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
+export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', onLanguageChange }: QuestionsTableProps) => {
   const [partFilter, setPartFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const { generateHtml, isGenerating } = useHtmlGenerator();
@@ -86,13 +90,29 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
     return `Part ${part}`;
   };
 
+  const toggleDisplayLanguage = () => {
+    const newLang = displayLanguage === 'english' ? 'hindi' : 'english';
+    onLanguageChange?.(newLang);
+  };
+
   return (
     <div className="card-elevated p-4 sm:p-6 animate-fade-in" style={{ animationDelay: '0.3s' }}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
-          <FileText className="h-5 w-5 text-primary" />
-          Question Analysis
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-base sm:text-lg font-semibold text-foreground flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Question Analysis
+          </h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleDisplayLanguage}
+            className="gap-1.5 text-xs h-7"
+          >
+            <Languages className="h-3.5 w-3.5" />
+            {displayLanguage === 'english' ? 'EN' : 'हिं'}
+          </Button>
+        </div>
         
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -186,7 +206,11 @@ export const QuestionsTable = ({ questions, result }: QuestionsTableProps) => {
           ) : (
             <div className="divide-y divide-border">
               {filteredQuestions.map((question) => (
-                <QuestionCard key={question.questionNumber} question={question} />
+                <QuestionCard 
+                  key={question.questionNumber} 
+                  question={question} 
+                  displayLanguage={displayLanguage}
+                />
               ))}
             </div>
           )}

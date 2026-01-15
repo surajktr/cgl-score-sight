@@ -268,33 +268,39 @@ function parseQuestionsForPart(
   const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
     if (!imageUrl) return {};
     
-    // Check if URL contains language suffix (_HI or _EN)
-    const isHindi = imageUrl.includes('_HI.jpg') || imageUrl.includes('_HI.png') || imageUrl.includes('_HI.jpeg');
-    const isEnglish = imageUrl.includes('_EN.jpg') || imageUrl.includes('_EN.png') || imageUrl.includes('_EN.jpeg');
+    // Check if URL contains language suffix (_HI or _EN) - handle query params
+    const isHindi = /_HI\.(jpg|jpeg|png|gif)/i.test(imageUrl);
+    const isEnglish = /_EN\.(jpg|jpeg|png|gif)/i.test(imageUrl);
     
     let hindiUrl = imageUrl;
     let englishUrl = imageUrl;
     
     if (isHindi) {
       // Current URL is Hindi, generate English URL
-      englishUrl = imageUrl.replace('_HI.jpg', '_EN.jpg')
-                           .replace('_HI.png', '_EN.png')
-                           .replace('_HI.jpeg', '_EN.jpeg');
+      englishUrl = imageUrl.replace(/_HI\.(jpg)/i, '_EN.$1')
+                           .replace(/_HI\.(jpeg)/i, '_EN.$1')
+                           .replace(/_HI\.(png)/i, '_EN.$1')
+                           .replace(/_HI\.(gif)/i, '_EN.$1');
     } else if (isEnglish) {
       // Current URL is English, generate Hindi URL
-      hindiUrl = imageUrl.replace('_EN.jpg', '_HI.jpg')
-                          .replace('_EN.png', '_HI.png')
-                          .replace('_EN.jpeg', '_HI.jpeg');
+      hindiUrl = imageUrl.replace(/_EN\.(jpg)/i, '_HI.$1')
+                          .replace(/_EN\.(jpeg)/i, '_HI.$1')
+                          .replace(/_EN\.(png)/i, '_HI.$1')
+                          .replace(/_EN\.(gif)/i, '_HI.$1');
     } else {
       // No language suffix detected, try to create both versions
-      // Look for pattern like .jpg and add suffix before extension
-      const extensionMatch = imageUrl.match(/\.(jpg|jpeg|png|gif)(\?.*)?$/i);
+      // Look for pattern like .jpg (with optional query string) and add suffix before extension
+      const extensionMatch = imageUrl.match(/\.([a-zA-Z]+)(\?.*)?$/i);
       if (extensionMatch) {
-        const ext = extensionMatch[1];
-        const queryString = extensionMatch[2] || '';
-        const basePath = imageUrl.substring(0, imageUrl.lastIndexOf('.' + ext));
-        hindiUrl = basePath + '_HI.' + ext + queryString;
-        englishUrl = basePath + '_EN.' + ext + queryString;
+        const ext = extensionMatch[1].toLowerCase();
+        if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
+          const queryString = extensionMatch[2] || '';
+          // Find position of the extension
+          const extPosition = imageUrl.lastIndexOf('.' + extensionMatch[1]);
+          const basePath = imageUrl.substring(0, extPosition);
+          hindiUrl = basePath + '_HI.' + extensionMatch[1] + queryString;
+          englishUrl = basePath + '_EN.' + extensionMatch[1] + queryString;
+        }
       }
     }
     
