@@ -547,15 +547,6 @@ serve(async (req) => {
     const examConfig = EXAM_CONFIGS[examType];
     console.log('Analyzing for exam:', examConfig.name, 'Language:', language);
 
-    const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
-    if (!apiKey) {
-      console.error('FIRECRAWL_API_KEY not configured');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Firecrawl connector not configured. Please enable the Firecrawl connector in Settings.' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Generate URLs for all parts based on exam config
     const partUrls = generatePartUrls(url, examConfig);
     console.log('Fetching parts:', partUrls.map(p => p.part).join(', '));
@@ -571,32 +562,31 @@ serve(async (req) => {
       questionOffset += subject.totalQuestions;
     }
 
-    // Fetch all parts in parallel
+    // Fetch all parts in parallel using direct fetch (FREE & UNLIMITED)
     const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
-      console.log(`Scraping Part ${part}:`, partUrl);
+      console.log(`Fetching Part ${part}:`, partUrl);
 
       try {
-        const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
+        // Direct fetch with browser-like headers
+        const response = await fetch(partUrl, {
+          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
           },
-          body: JSON.stringify({
-            url: partUrl,
-            formats: ['html', 'rawHtml'],
-            waitFor: 3000,
-          }),
         });
 
-        const scrapeData = await scrapeResponse.json();
-
-        if (!scrapeResponse.ok || !scrapeData.success) {
-          console.error(`Failed to scrape Part ${part}:`, scrapeData.error);
+        if (!response.ok) {
+          console.error(`Failed to fetch Part ${part}: HTTP ${response.status}`);
           return { part, questions: [], html: '' };
         }
 
-        const html = scrapeData.data?.html || scrapeData.data?.rawHtml || '';
+        const html = await response.text();
         console.log(`Part ${part} HTML length:`, html.length);
 
         const questions = parseQuestionsForPart(html, part, partUrl, subject, partOffsets[part]);
@@ -604,7 +594,7 @@ serve(async (req) => {
 
         return { part, questions, html };
       } catch (error) {
-        console.error(`Error scraping Part ${part}:`, error);
+        console.error(`Error fetching Part ${part}:`, error);
         return { part, questions: [], html: '' };
       }
     });
