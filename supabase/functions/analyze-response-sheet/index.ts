@@ -562,6 +562,66 @@ serve(async (req) => {
       questionOffset += subject.totalQuestions;
     }
 
+    // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern)
+    const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1') || url.endsWith('.html');
+    
+    if (isAnswerKeyUrl) {
+      console.log('Detected Answer Key URL format');
+      // For answer keys, fetch the single URL directly
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
+          },
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to fetch answer key: HTTP ${response.status}`);
+          return new Response(
+            JSON.stringify({ success: false, error: `Failed to fetch answer key: HTTP ${response.status}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const html = await response.text();
+        console.log('Answer key HTML length:', html.length);
+        console.log('Answer key HTML preview (first 5000 chars):', html.substring(0, 5000));
+        console.log('Answer key HTML contains "table":', html.includes('<table'));
+        console.log('Answer key HTML contains "Q.No":', html.includes('Q.No'));
+        console.log('Answer key HTML contains question patterns:', html.match(/Q[\.\s]*No|Question\s*No|Question\s*Number/gi)?.slice(0, 5));
+        
+        // Try to find any image patterns
+        const imgMatches = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
+        console.log('Image tags found:', imgMatches?.length || 0);
+        if (imgMatches && imgMatches.length > 0) {
+          console.log('First 5 image sources:', imgMatches.slice(0, 5));
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Answer key format detected but parsing not yet implemented. Check logs for HTML structure.',
+            debug: {
+              htmlLength: html.length,
+              hasTable: html.includes('<table'),
+              hasQNo: html.includes('Q.No'),
+              imageCount: imgMatches?.length || 0
+            }
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (error) {
+        console.error('Error fetching answer key:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: `Error fetching answer key: ${error}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Fetch all parts in parallel using direct fetch (FREE & UNLIMITED)
     const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
       console.log(`Fetching Part ${part}:`, partUrl);
