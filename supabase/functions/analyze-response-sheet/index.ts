@@ -494,6 +494,148 @@ function parseQuestionsForPart(
 
   return questions;
 }
+
+// Parse answer key format questions (AssessmentQPHTMLMode1 format)
+function parseAnswerKeyQuestions(
+  html: string,
+  baseUrl: string,
+  examConfig: ExamConfig
+): QuestionData[] {
+  console.log('=== ANSWER KEY PARSER - Parsing answer key format ===');
+  const questions: QuestionData[] = [];
+  
+  // Helper function to resolve relative URLs
+  const resolveUrl = (src: string): string => {
+    if (!src) return '';
+    if (src.startsWith('http')) return src;
+    if (src.startsWith('/')) return baseUrl + src;
+    return baseUrl + '/' + src;
+  };
+  
+  // Helper function to get both Hindi and English image URLs
+  const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
+    if (!imageUrl) return {};
+    
+    // Check for _en or _hi suffix patterns
+    const isEnglish = /_en\.(jpg|jpeg|png|gif)/i.test(imageUrl);
+    const isHindi = /_hi\.(jpg|jpeg|png|gif)/i.test(imageUrl);
+    
+    let hindiUrl = imageUrl;
+    let englishUrl = imageUrl;
+    
+    if (isEnglish) {
+      hindiUrl = imageUrl.replace(/_en\.(jpg)/i, '_hi.$1')
+        .replace(/_en\.(jpeg)/i, '_hi.$1')
+        .replace(/_en\.(png)/i, '_hi.$1')
+        .replace(/_en\.(gif)/i, '_hi.$1');
+    } else if (isHindi) {
+      englishUrl = imageUrl.replace(/_hi\.(jpg)/i, '_en.$1')
+        .replace(/_hi\.(jpeg)/i, '_en.$1')
+        .replace(/_hi\.(png)/i, '_en.$1')
+        .replace(/_hi\.(gif)/i, '_en.$1');
+    }
+    
+    return { hindi: hindiUrl, english: englishUrl };
+  };
+  
+  // Find all question tables (class="questionRowTbl")
+  const questionTablePattern = /<table[^>]*class\s*=\s*["']questionRowTbl["'][^>]*>[\s\S]*?<\/table>/gi;
+  let tableMatch;
+  const optionIds = ['A', 'B', 'C', 'D'];
+  
+  while ((tableMatch = questionTablePattern.exec(html)) !== null) {
+    const tableContent = tableMatch[0];
+    
+    // Extract question number (Q.1, Q.2, etc.)
+    const qNumMatch = tableContent.match(/Q\.(\d+)/i);
+    if (!qNumMatch) continue;
+    
+    const qNum = parseInt(qNumMatch[1]);
+    
+    // Find the question image (first img in the table, usually after Q.X)
+    const questionImgMatch = tableContent.match(/<td[^>]*class\s*=\s*["']bold["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+    let questionImageUrl = questionImgMatch ? resolveUrl(questionImgMatch[1]) : '';
+    
+    // Get Hindi and English URLs for question
+    const questionLangUrls = getLanguageUrls(questionImageUrl);
+    
+    // Parse options - look for rows with rightAns or wrngAns classes
+    const options: QuestionData['options'] = [];
+    
+    // Pattern to find option rows with answer classes
+    // Each option has format: <td class="wrngAns|rightAns">...<img>...</td>
+    const optionPattern = /<td[^>]*class\s*=\s*["'](wrngAns|rightAns)["'][^>]*>[\s\S]*?(\d+)\.\s*<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+    let optionMatch;
+    let optIdx = 0;
+    
+    while ((optionMatch = optionPattern.exec(tableContent)) !== null && optIdx < 4) {
+      const answerClass = optionMatch[1];
+      const optionImgSrc = resolveUrl(optionMatch[3]);
+      
+      const isCorrect = answerClass === 'rightAns';
+      const optionLangUrls = getLanguageUrls(optionImgSrc);
+      
+      options.push({
+        id: optionIds[optIdx],
+        imageUrl: optionImgSrc,
+        imageUrlHindi: optionLangUrls.hindi || optionImgSrc,
+        imageUrlEnglish: optionLangUrls.english || optionImgSrc,
+        isSelected: false, // No user selection in answer key
+        isCorrect: isCorrect,
+      });
+      
+      optIdx++;
+      console.log(`Q${qNum} Option ${optionIds[optIdx-1]}: ${isCorrect ? 'CORRECT' : 'wrong'}`);
+    }
+    
+    // Ensure we have exactly 4 options
+    while (options.length < 4) {
+      options.push({
+        id: optionIds[options.length],
+        imageUrl: '',
+        imageUrlHindi: '',
+        imageUrlEnglish: '',
+        isSelected: false,
+        isCorrect: false,
+      });
+    }
+    
+    // Determine which part/subject this question belongs to
+    let currentPart = 'A';
+    let currentSubject = examConfig.subjects[0];
+    let questionOffset = 0;
+    
+    for (const subject of examConfig.subjects) {
+      const partEnd = questionOffset + subject.totalQuestions;
+      if (qNum <= partEnd) {
+        currentPart = subject.part;
+        currentSubject = subject;
+        break;
+      }
+      questionOffset = partEnd;
+    }
+    
+    questions.push({
+      questionNumber: qNum,
+      part: currentPart,
+      subject: currentSubject.name,
+      questionImageUrl: questionImageUrl,
+      questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
+      questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
+      options,
+      status: 'unattempted', // Answer key shows answers, not user attempts
+      marksAwarded: 0,
+    });
+    
+    console.log(`Parsed Q${qNum} - Part ${currentPart}`);
+  }
+  
+  // Sort by question number
+  questions.sort((a, b) => a.questionNumber - b.questionNumber);
+  
+  return questions;
+}
+
 // Calculate section-wise breakdown
 function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
   const sections: SectionData[] = [];
@@ -588,30 +730,65 @@ serve(async (req) => {
 
         const html = await response.text();
         console.log('Answer key HTML length:', html.length);
-        console.log('Answer key HTML preview (first 5000 chars):', html.substring(0, 5000));
-        console.log('Answer key HTML contains "table":', html.includes('<table'));
-        console.log('Answer key HTML contains "Q.No":', html.includes('Q.No'));
-        console.log('Answer key HTML contains question patterns:', html.match(/Q[\.\s]*No|Question\s*No|Question\s*Number/gi)?.slice(0, 5));
         
-        // Try to find any image patterns
-        const imgMatches = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
-        console.log('Image tags found:', imgMatches?.length || 0);
-        if (imgMatches && imgMatches.length > 0) {
-          console.log('First 5 image sources:', imgMatches.slice(0, 5));
+        // Extract base URL for resolving relative image paths
+        const urlObj = new URL(url);
+        const baseUrl = urlObj.origin;
+        
+        // Parse answer key format questions
+        const answerKeyQuestions = parseAnswerKeyQuestions(html, baseUrl, examConfig);
+        console.log('Answer key questions parsed:', answerKeyQuestions.length);
+        
+        if (answerKeyQuestions.length === 0) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Could not parse questions from the answer key. The format may have changed.'
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
-
+        
+        // For answer keys, we don't have candidate info, so use defaults
+        const answerKeyCandidate: CandidateInfo = {
+          rollNumber: '',
+          name: 'Answer Key',
+          examLevel: examConfig.name,
+          testDate: '',
+          shift: '',
+          centreName: '',
+        };
+        
+        // Calculate sections
+        const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
+        
+        // For answer key, all questions are "unattempted" (no user answers)
+        // But we mark them as unattempted so correct answer is highlighted
+        const correctCount = 0;
+        const wrongCount = 0;
+        const unattemptedCount = answerKeyQuestions.length;
+        const totalScore = 0;
+        
+        const answerKeyResult: AnalysisResult = {
+          candidate: answerKeyCandidate,
+          examType,
+          examConfig,
+          language,
+          totalScore,
+          maxScore: examConfig.maxMarks,
+          totalQuestions: answerKeyQuestions.length,
+          correctCount,
+          wrongCount,
+          unattemptedCount,
+          sections: answerKeySections,
+          questions: answerKeyQuestions,
+        };
+        
+        console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length);
+        
         return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'Answer key format detected but parsing not yet implemented. Check logs for HTML structure.',
-            debug: {
-              htmlLength: html.length,
-              hasTable: html.includes('<table'),
-              hasQNo: html.includes('Q.No'),
-              imageCount: imgMatches?.length || 0
-            }
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: true, data: answerKeyResult }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (error) {
         console.error('Error fetching answer key:', error);
