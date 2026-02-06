@@ -495,13 +495,13 @@ function parseQuestionsForPart(
   return questions;
 }
 
-// Parse answer key format questions (AssessmentQPHTMLMode1 format)
+// Parse answer key/response sheet format questions (AssessmentQPHTMLMode1 format)
 function parseAnswerKeyQuestions(
   html: string,
   baseUrl: string,
   examConfig: ExamConfig
 ): QuestionData[] {
-  console.log('=== ANSWER KEY PARSER - Parsing answer key format ===');
+  console.log('=== ANSWER KEY PARSER V2 - Parsing new format ===');
   const questions: QuestionData[] = [];
   
   // Helper function to resolve relative URLs
@@ -516,7 +516,7 @@ function parseAnswerKeyQuestions(
   const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
     if (!imageUrl) return {};
     
-    // Check for _en or _hi suffix patterns
+    // Check for _en or _hi suffix patterns (case insensitive)
     const isEnglish = /_en\.(jpg|jpeg|png|gif)/i.test(imageUrl);
     const isHindi = /_hi\.(jpg|jpeg|png|gif)/i.test(imageUrl);
     
@@ -524,53 +524,65 @@ function parseAnswerKeyQuestions(
     let englishUrl = imageUrl;
     
     if (isEnglish) {
-      hindiUrl = imageUrl.replace(/_en\.(jpg)/i, '_hi.$1')
-        .replace(/_en\.(jpeg)/i, '_hi.$1')
-        .replace(/_en\.(png)/i, '_hi.$1')
-        .replace(/_en\.(gif)/i, '_hi.$1');
+      hindiUrl = imageUrl.replace(/_en\.([a-zA-Z]+)/i, '_hi.$1');
     } else if (isHindi) {
-      englishUrl = imageUrl.replace(/_hi\.(jpg)/i, '_en.$1')
-        .replace(/_hi\.(jpeg)/i, '_en.$1')
-        .replace(/_hi\.(png)/i, '_en.$1')
-        .replace(/_hi\.(gif)/i, '_en.$1');
+      englishUrl = imageUrl.replace(/_hi\.([a-zA-Z]+)/i, '_en.$1');
     }
     
     return { hindi: hindiUrl, english: englishUrl };
   };
   
-  // Find all question tables (class="questionRowTbl")
-  const questionTablePattern = /<table[^>]*class\s*=\s*["']questionRowTbl["'][^>]*>[\s\S]*?<\/table>/gi;
-  let tableMatch;
   const optionIds = ['A', 'B', 'C', 'D'];
   
-  while ((tableMatch = questionTablePattern.exec(html)) !== null) {
-    const tableContent = tableMatch[0];
-    
+  // Find all question blocks - each question is in a <td class="rw"> containing a questionRowTbl
+  // Pattern: <td class="rw">...<table class="questionRowTbl">...</table>...</td>
+  const questionBlockPattern = /<td[^>]*class\s*=\s*["']rw["'][^>]*>([\s\S]*?)<\/td>\s*(?=<td[^>]*class\s*=\s*["']rw["']|$)/gi;
+  
+  // Alternative: find each questionRowTbl table and its sibling menu-tbl
+  const allRowTds = html.match(/<td[^>]*class\s*=\s*["']rw["'][^>]*>[\s\S]*?<\/td>/gi) || [];
+  console.log(`Found ${allRowTds.length} question blocks`);
+  
+  for (const rowTd of allRowTds) {
     // Extract question number (Q.1, Q.2, etc.)
-    const qNumMatch = tableContent.match(/Q\.(\d+)/i);
+    const qNumMatch = rowTd.match(/Q\.(\d+)/);
     if (!qNumMatch) continue;
     
     const qNum = parseInt(qNumMatch[1]);
+    console.log(`Processing Q.${qNum}`);
     
-    // Find the question image (first img in the table, usually after Q.X)
-    const questionImgMatch = tableContent.match(/<td[^>]*class\s*=\s*["']bold["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+    // Find the question image - it's in <td class="bold" valign="top">...<img src="...">
+    // The question image is the first img after Q.X in a bold td
+    const questionImgMatch = rowTd.match(/<td[^>]*class\s*=\s*["']bold["'][^>]*valign\s*=\s*["']top["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
     let questionImageUrl = questionImgMatch ? resolveUrl(questionImgMatch[1]) : '';
+    
+    // If not found, try alternative pattern
+    if (!questionImageUrl) {
+      const altQImgMatch = rowTd.match(/Q\.\d+<\/td><td[^>]*class\s*=\s*["']bold["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+      if (altQImgMatch) {
+        questionImageUrl = resolveUrl(altQImgMatch[1]);
+      }
+    }
     
     // Get Hindi and English URLs for question
     const questionLangUrls = getLanguageUrls(questionImageUrl);
+    console.log(`Q${qNum} image:`, questionImageUrl?.substring(0, 80));
     
-    // Parse options - look for rows with rightAns or wrngAns classes
+    // Parse options - look for td with wrngAns or rightAns class
+    // Format: <td class="wrngAns|rightAns">...<cross/tick>N. <img src="...">
     const options: QuestionData['options'] = [];
     
-    // Pattern to find option rows with answer classes
-    // Each option has format: <td class="wrngAns|rightAns">...<img>...</td>
-    const optionPattern = /<td[^>]*class\s*=\s*["'](wrngAns|rightAns)["'][^>]*>[\s\S]*?(\d+)\.\s*<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+    // Pattern to find all option tds
+    const optionTdPattern = /<td[^>]*class\s*=\s*["'](wrngAns|rightAns)["'][^>]*>([\s\S]*?)<\/td>/gi;
     let optionMatch;
     let optIdx = 0;
     
-    while ((optionMatch = optionPattern.exec(tableContent)) !== null && optIdx < 4) {
+    while ((optionMatch = optionTdPattern.exec(rowTd)) !== null && optIdx < 4) {
       const answerClass = optionMatch[1];
-      const optionImgSrc = resolveUrl(optionMatch[3]);
+      const optionContent = optionMatch[2];
+      
+      // Extract option image - format: N. <img src="...">
+      const optionImgMatch = optionContent.match(/\d+\.\s*<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+      const optionImgSrc = optionImgMatch ? resolveUrl(optionImgMatch[1]) : '';
       
       const isCorrect = answerClass === 'rightAns';
       const optionLangUrls = getLanguageUrls(optionImgSrc);
@@ -580,12 +592,25 @@ function parseAnswerKeyQuestions(
         imageUrl: optionImgSrc,
         imageUrlHindi: optionLangUrls.hindi || optionImgSrc,
         imageUrlEnglish: optionLangUrls.english || optionImgSrc,
-        isSelected: false, // No user selection in answer key
+        isSelected: false, // Will be set based on Chosen Option
         isCorrect: isCorrect,
       });
       
+      console.log(`  Option ${optionIds[optIdx]}: ${isCorrect ? 'CORRECT ✓' : 'wrong'}`);
       optIdx++;
-      console.log(`Q${qNum} Option ${optionIds[optIdx-1]}: ${isCorrect ? 'CORRECT' : 'wrong'}`);
+    }
+    
+    // Extract user's chosen option from menu-tbl
+    // Format: <td>Chosen Option :</td><td class="bold">4</td>
+    const chosenMatch = rowTd.match(/Chosen\s*Option\s*:<\/td>\s*<td[^>]*class\s*=\s*["']bold["'][^>]*>(\d+|--)/i);
+    const chosenOption = chosenMatch ? chosenMatch[1] : '--';
+    
+    // Mark selected option
+    if (chosenOption !== '--' && parseInt(chosenOption) >= 1 && parseInt(chosenOption) <= 4) {
+      const selectedIdx = parseInt(chosenOption) - 1;
+      if (options[selectedIdx]) {
+        options[selectedIdx].isSelected = true;
+      }
     }
     
     // Ensure we have exactly 4 options
@@ -600,20 +625,35 @@ function parseAnswerKeyQuestions(
       });
     }
     
+    // Determine status based on selection and correctness
+    let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
+    const selectedOption = options.find(o => o.isSelected);
+    
+    if (selectedOption) {
+      status = selectedOption.isCorrect ? 'correct' : 'wrong';
+    }
+    
     // Determine which part/subject this question belongs to
     let currentPart = 'A';
     let currentSubject = examConfig.subjects[0];
-    let questionOffset = 0;
+    let qOffset = 0;
     
     for (const subject of examConfig.subjects) {
-      const partEnd = questionOffset + subject.totalQuestions;
+      const partEnd = qOffset + subject.totalQuestions;
       if (qNum <= partEnd) {
         currentPart = subject.part;
         currentSubject = subject;
         break;
       }
-      questionOffset = partEnd;
+      qOffset = partEnd;
     }
+    
+    // Calculate marks
+    const marksAwarded = status === 'correct'
+      ? currentSubject.correctMarks
+      : status === 'wrong'
+        ? -currentSubject.negativeMarks
+        : 0;
     
     questions.push({
       questionNumber: qNum,
@@ -623,16 +663,17 @@ function parseAnswerKeyQuestions(
       questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
       questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
       options,
-      status: 'unattempted', // Answer key shows answers, not user attempts
-      marksAwarded: 0,
+      status,
+      marksAwarded,
     });
     
-    console.log(`Parsed Q${qNum} - Part ${currentPart}`);
+    console.log(`Parsed Q${qNum} - Part ${currentPart} - Status: ${status} - Chosen: ${chosenOption}`);
   }
   
   // Sort by question number
   questions.sort((a, b) => a.questionNumber - b.questionNumber);
   
+  console.log(`Total questions parsed: ${questions.length}`);
   return questions;
 }
 
@@ -749,25 +790,49 @@ serve(async (req) => {
           );
         }
         
-        // For answer keys, we don't have candidate info, so use defaults
-        const answerKeyCandidate: CandidateInfo = {
-          rollNumber: '',
-          name: 'Answer Key',
-          examLevel: examConfig.name,
-          testDate: '',
-          shift: '',
-          centreName: '',
+        // Parse candidate info from this format
+        // Format: Roll Number 3201000550, Candidate Name SURAJ KUMAR, etc.
+        const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
+          const getValue = (label: string): string => {
+            // Pattern: <td>Label</td><td>Value</td> or similar
+            const patterns = [
+              new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
+              new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
+              new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
+            ];
+            
+            for (const regex of patterns) {
+              const match = htmlContent.match(regex);
+              if (match) {
+                return match[1].replace(/&nbsp;/g, ' ').trim();
+              }
+            }
+            return '';
+          };
+          
+          return {
+            rollNumber: getValue('Roll Number') || getValue('Roll No'),
+            name: getValue('Candidate Name') || getValue('Name'),
+            examLevel: getValue('Subject') || examConfig.name,
+            testDate: getValue('Exam Date') || getValue('Test Date'),
+            shift: getValue('Exam Time') || getValue('Test Time'),
+            centreName: getValue('Venue Name') || getValue('Centre Name'),
+          };
         };
+        
+        const answerKeyCandidate = parseAnswerKeyCandidateInfo(html);
+        console.log('Parsed candidate:', answerKeyCandidate);
         
         // Calculate sections
         const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
         
-        // For answer key, all questions are "unattempted" (no user answers)
-        // But we mark them as unattempted so correct answer is highlighted
-        const correctCount = 0;
-        const wrongCount = 0;
-        const unattemptedCount = answerKeyQuestions.length;
-        const totalScore = 0;
+        // Calculate actual counts based on parsed questions
+        const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
+        const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
+        const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
+        const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
+        
+        console.log(`Scores - Correct: ${correctCount}, Wrong: ${wrongCount}, Unattempted: ${unattemptedCount}, Total: ${totalScore}`);
         
         const answerKeyResult: AnalysisResult = {
           candidate: answerKeyCandidate,
@@ -784,7 +849,7 @@ serve(async (req) => {
           questions: answerKeyQuestions,
         };
         
-        console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length);
+        console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
         
         return new Response(
           JSON.stringify({ success: true, data: answerKeyResult }),
