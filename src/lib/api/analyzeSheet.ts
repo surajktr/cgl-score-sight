@@ -35,3 +35,32 @@ export async function analyzeResponseSheet(
     };
   }
 }
+
+// Analyze using pasted HTML directly (fallback when URL fetch is blocked)
+export async function analyzeFromHtml(
+  html: string, 
+  examType: ExamType, 
+  language: Language
+): Promise<AnalyzeResponse> {
+  try {
+    const { data, error } = await supabase.functions.invoke('analyze-response-sheet', {
+      body: { html, examType, language },
+    });
+
+    if (error) {
+      console.error('Edge function error:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Failed to analyze pasted HTML' 
+      };
+    }
+
+    return data as AnalyzeResponse;
+  } catch (err) {
+    console.error('API error:', err);
+    return { 
+      success: false, 
+      error: err instanceof Error ? err.message : 'An unexpected error occurred' 
+    };
+  }
+}
