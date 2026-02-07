@@ -2,8 +2,185 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
+
+// Comprehensive browser-like headers to bypass anti-bot detection
+const getBrowserHeaders = (referer?: string): HeadersInit => ({
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+  'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Connection': 'keep-alive',
+  'Upgrade-Insecure-Requests': '1',
+  'Cache-Control': 'max-age=0',
+  'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': referer ? 'same-origin' : 'none',
+  'Sec-Fetch-User': '?1',
+  ...(referer ? { 'Referer': referer } : {}),
+});
+
+// Fetch using Firecrawl API (handles geo-blocks and anti-bot)
+async function fetchWithFirecrawl(
+  url: string
+): Promise<{ ok: boolean; html: string; error?: string }> {
+  const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
+  
+  if (!apiKey) {
+    console.log('[FIRECRAWL] API key not configured');
+    return { ok: false, html: '', error: 'Firecrawl API key not configured' };
+  }
+  
+  console.log(`[FIRECRAWL] Scraping URL: ${url}`);
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: url,
+        formats: ['html', 'rawHtml'],
+        onlyMainContent: false,
+        waitFor: 3000, // Wait for dynamic content
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('[FIRECRAWL] API error:', data);
+      return { ok: false, html: '', error: data.error || `Firecrawl error: ${response.status}` };
+    }
+    
+    // Firecrawl returns data in data.data.rawHtml or data.data.html
+    const html = data.data?.rawHtml || data.data?.html || data.rawHtml || data.html || '';
+    
+    if (!html) {
+      console.error('[FIRECRAWL] No HTML content in response');
+      return { ok: false, html: '', error: 'Firecrawl returned no HTML content' };
+    }
+    
+    console.log(`[FIRECRAWL] Success! Received ${html.length} bytes`);
+    return { ok: true, html };
+    
+  } catch (error) {
+    console.error('[FIRECRAWL] Network error:', error);
+    return { ok: false, html: '', error: `Firecrawl error: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+// Fetch with browser headers (direct fetch)
+async function fetchDirect(
+  url: string, 
+  referer?: string,
+  maxRedirects: number = 5
+): Promise<{ ok: boolean; status: number; statusText: string; html: string; finalUrl: string; error?: string }> {
+  let currentUrl = url;
+  let redirectCount = 0;
+  
+  console.log(`[DIRECT] Starting fetch for: ${url}`);
+  
+  while (redirectCount < maxRedirects) {
+    try {
+      const response = await fetch(currentUrl, {
+        method: 'GET',
+        headers: getBrowserHeaders(referer || currentUrl),
+        redirect: 'manual',
+      });
+      
+      console.log(`[DIRECT] Response status: ${response.status} ${response.statusText} for ${currentUrl}`);
+      
+      // Handle redirects
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get('Location');
+        if (!location) {
+          return { ok: false, status: response.status, statusText: 'Redirect without Location', html: '', finalUrl: currentUrl, error: 'Redirect without Location header' };
+        }
+        
+        const nextUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
+        console.log(`[DIRECT] Following redirect ${redirectCount + 1}: ${currentUrl} -> ${nextUrl}`);
+        referer = currentUrl;
+        currentUrl = nextUrl;
+        redirectCount++;
+        continue;
+      }
+      
+      if (!response.ok) {
+        console.error(`[DIRECT] HTTP Error: ${response.status} ${response.statusText}`);
+        return { ok: false, status: response.status, statusText: response.statusText, html: '', finalUrl: currentUrl, error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+      
+      const html = await response.text();
+      console.log(`[DIRECT] Success! Received ${html.length} bytes from ${currentUrl}`);
+      
+      // Check for soft blocks
+      if (html.includes('Access Denied') || html.includes('Request Blocked') || html.includes('captcha')) {
+        console.warn(`[DIRECT] Soft block detected in response HTML`);
+        return { ok: false, status: 200, statusText: 'OK (but blocked)', html: '', finalUrl: currentUrl, error: 'The server returned a block page.' };
+      }
+      
+      return { ok: true, status: 200, statusText: 'OK', html, finalUrl: currentUrl };
+      
+    } catch (error) {
+      console.error(`[DIRECT] Network error:`, error);
+      return { ok: false, status: 0, statusText: 'Network Error', html: '', finalUrl: currentUrl, error: `Network error: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+  
+  return { ok: false, status: 0, statusText: 'Too Many Redirects', html: '', finalUrl: currentUrl, error: `Exceeded maximum redirects (${maxRedirects})` };
+}
+
+// Main fetch function: tries direct fetch first, falls back to Firecrawl on geo-blocks
+async function fetchWithBrowserHeaders(
+  url: string, 
+  referer?: string,
+  maxRedirects: number = 5
+): Promise<{ ok: boolean; status: number; statusText: string; html: string; finalUrl: string; error?: string }> {
+  // Try direct fetch first
+  const directResult = await fetchDirect(url, referer, maxRedirects);
+  
+  // If direct fetch succeeded, return it
+  if (directResult.ok) {
+    return directResult;
+  }
+  
+  // If blocked by geo/legal restrictions (451, 403), try Firecrawl
+  if (directResult.status === 451 || directResult.status === 403) {
+    console.log(`[FETCH] Direct fetch blocked (${directResult.status}), trying Firecrawl...`);
+    
+    const firecrawlResult = await fetchWithFirecrawl(url);
+    
+    if (firecrawlResult.ok) {
+      return { 
+        ok: true, 
+        status: 200, 
+        statusText: 'OK (via Firecrawl)', 
+        html: firecrawlResult.html, 
+        finalUrl: url 
+      };
+    }
+    
+    // Both failed - return Firecrawl error with context
+    return { 
+      ok: false, 
+      status: directResult.status, 
+      statusText: directResult.statusText, 
+      html: '', 
+      finalUrl: url, 
+      error: `Direct fetch blocked (${directResult.status}). Firecrawl fallback also failed: ${firecrawlResult.error}` 
+    };
+  }
+  
+  // Other errors - return direct result
+  return directResult;
+}
 
 interface CandidateInfo {
   rollNumber: string;
@@ -711,11 +888,132 @@ serve(async (req) => {
   }
 
   try {
-    const { url, examType, language } = await req.json();
+    const { url, examType, language, html: directHtml } = await req.json();
+
+    // Check if user provided raw HTML directly (paste mode fallback)
+    if (directHtml && typeof directHtml === 'string' && directHtml.length > 1000) {
+      console.log('Processing direct HTML paste input, length:', directHtml.length);
+      
+      if (!examType || !EXAM_CONFIGS[examType]) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Valid exam type is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const examConfig = EXAM_CONFIGS[examType];
+      
+      // Parse the pasted HTML using answer key parser
+      const answerKeyQuestions = parseAnswerKeyQuestions(directHtml, '', examConfig);
+      console.log('Parsed questions from pasted HTML:', answerKeyQuestions.length);
+      
+      if (answerKeyQuestions.length === 0) {
+        // Try the standard parser
+        const subject = examConfig.subjects[0];
+        const standardQuestions = parseQuestionsForPart(directHtml, 'A', '', subject, 0);
+        
+        if (standardQuestions.length === 0) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Could not parse questions from the pasted HTML. Please ensure you copied the full page source.'
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Process standard format
+        const parsedCandidate = parseCandidateInfo(directHtml);
+        const sections = calculateSections(standardQuestions, examConfig);
+        
+        const correctCount = standardQuestions.filter(q => q.status === 'correct').length;
+        const wrongCount = standardQuestions.filter(q => q.status === 'wrong').length;
+        const unattemptedCount = standardQuestions.filter(q => q.status === 'unattempted').length;
+        const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
+        
+        const result: AnalysisResult = {
+          candidate: parsedCandidate,
+          examType,
+          examConfig,
+          language,
+          totalScore,
+          maxScore: examConfig.maxMarks,
+          totalQuestions: standardQuestions.length,
+          correctCount,
+          wrongCount,
+          unattemptedCount,
+          sections,
+          questions: standardQuestions,
+        };
+        
+        return new Response(
+          JSON.stringify({ success: true, data: result }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Parse candidate info from pasted HTML
+      const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
+        const getValue = (label: string): string => {
+          const patterns = [
+            new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
+            new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
+            new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
+          ];
+          
+          for (const regex of patterns) {
+            const match = htmlContent.match(regex);
+            if (match) {
+              return match[1].replace(/&nbsp;/g, ' ').trim();
+            }
+          }
+          return '';
+        };
+        
+        return {
+          rollNumber: getValue('Roll Number') || getValue('Roll No'),
+          name: getValue('Candidate Name') || getValue('Name'),
+          examLevel: getValue('Subject') || examConfig.name,
+          testDate: getValue('Exam Date') || getValue('Test Date'),
+          shift: getValue('Exam Time') || getValue('Test Time'),
+          centreName: getValue('Venue Name') || getValue('Centre Name'),
+        };
+      };
+      
+      const answerKeyCandidate = parseAnswerKeyCandidateInfo(directHtml);
+      const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
+      
+      const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
+      const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
+      const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
+      const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
+      
+      const answerKeyResult: AnalysisResult = {
+        candidate: answerKeyCandidate,
+        examType,
+        examConfig,
+        language,
+        totalScore,
+        maxScore: examConfig.maxMarks,
+        totalQuestions: answerKeyQuestions.length,
+        correctCount,
+        wrongCount,
+        unattemptedCount,
+        sections: answerKeySections,
+        questions: answerKeyQuestions,
+      };
+      
+      console.log('Paste mode analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
+      
+      return new Response(
+        JSON.stringify({ success: true, data: answerKeyResult }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!url) {
       return new Response(
-        JSON.stringify({ success: false, error: 'URL is required' }),
+        JSON.stringify({ success: false, error: 'URL or HTML content is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -745,160 +1043,130 @@ serve(async (req) => {
       questionOffset += subject.totalQuestions;
     }
 
-    // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern)
-    const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1') || url.endsWith('.html');
+    // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern only, not generic .html)
+    // The standard ViewCandResponse.aspx URLs go through the multi-part fetch logic
+    const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1');
     
     if (isAnswerKeyUrl) {
       console.log('Detected Answer Key URL format');
-      // For answer keys, fetch the single URL directly
-      try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
-          },
-        });
-
-        if (!response.ok) {
-          console.error(`Failed to fetch answer key: HTTP ${response.status}`);
-          return new Response(
-            JSON.stringify({ success: false, error: `Failed to fetch answer key: HTTP ${response.status}` }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const html = await response.text();
-        console.log('Answer key HTML length:', html.length);
-        
-        // Extract base URL for resolving relative image paths
-        const urlObj = new URL(url);
-        const baseUrl = urlObj.origin;
-        
-        // Parse answer key format questions
-        const answerKeyQuestions = parseAnswerKeyQuestions(html, baseUrl, examConfig);
-        console.log('Answer key questions parsed:', answerKeyQuestions.length);
-        
-        if (answerKeyQuestions.length === 0) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: 'Could not parse questions from the answer key. The format may have changed.'
-            }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Parse candidate info from this format
-        // Format: Roll Number 3201000550, Candidate Name SURAJ KUMAR, etc.
-        const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
-          const getValue = (label: string): string => {
-            // Pattern: <td>Label</td><td>Value</td> or similar
-            const patterns = [
-              new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
-              new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
-              new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
-            ];
-            
-            for (const regex of patterns) {
-              const match = htmlContent.match(regex);
-              if (match) {
-                return match[1].replace(/&nbsp;/g, ' ').trim();
-              }
-            }
-            return '';
-          };
-          
-          return {
-            rollNumber: getValue('Roll Number') || getValue('Roll No'),
-            name: getValue('Candidate Name') || getValue('Name'),
-            examLevel: getValue('Subject') || examConfig.name,
-            testDate: getValue('Exam Date') || getValue('Test Date'),
-            shift: getValue('Exam Time') || getValue('Test Time'),
-            centreName: getValue('Venue Name') || getValue('Centre Name'),
-          };
-        };
-        
-        const answerKeyCandidate = parseAnswerKeyCandidateInfo(html);
-        console.log('Parsed candidate:', answerKeyCandidate);
-        
-        // Calculate sections
-        const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
-        
-        // Calculate actual counts based on parsed questions
-        const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
-        const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
-        const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
-        const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
-        
-        console.log(`Scores - Correct: ${correctCount}, Wrong: ${wrongCount}, Unattempted: ${unattemptedCount}, Total: ${totalScore}`);
-        
-        const answerKeyResult: AnalysisResult = {
-          candidate: answerKeyCandidate,
-          examType,
-          examConfig,
-          language,
-          totalScore,
-          maxScore: examConfig.maxMarks,
-          totalQuestions: answerKeyQuestions.length,
-          correctCount,
-          wrongCount,
-          unattemptedCount,
-          sections: answerKeySections,
-          questions: answerKeyQuestions,
-        };
-        
-        console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
-        
+      // For answer keys, fetch the single URL directly using enhanced browser impersonation
+      const fetchResult = await fetchWithBrowserHeaders(url);
+      
+      if (!fetchResult.ok) {
+        console.error(`Failed to fetch answer key: ${fetchResult.error}`);
         return new Response(
-          JSON.stringify({ success: true, data: answerKeyResult }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (error) {
-        console.error('Error fetching answer key:', error);
-        return new Response(
-          JSON.stringify({ success: false, error: `Error fetching answer key: ${error}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ 
+            success: false, 
+            error: fetchResult.error || `Failed to fetch answer key: HTTP ${fetchResult.status} ${fetchResult.statusText}`
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      const html = fetchResult.html;
+      console.log('Answer key HTML length:', html.length);
+      
+      // Extract base URL for resolving relative image paths
+      const urlObj = new URL(fetchResult.finalUrl);
+      const baseUrl = urlObj.origin;
+      
+      // Parse answer key format questions
+      const answerKeyQuestions = parseAnswerKeyQuestions(html, baseUrl, examConfig);
+      console.log('Answer key questions parsed:', answerKeyQuestions.length);
+      
+      if (answerKeyQuestions.length === 0) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Could not parse questions from the answer key. The format may have changed or the page content was blocked.'
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Parse candidate info from this format
+      const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
+        const getValue = (label: string): string => {
+          const patterns = [
+            new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
+            new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
+            new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
+          ];
+          
+          for (const regex of patterns) {
+            const match = htmlContent.match(regex);
+            if (match) {
+              return match[1].replace(/&nbsp;/g, ' ').trim();
+            }
+          }
+          return '';
+        };
+        
+        return {
+          rollNumber: getValue('Roll Number') || getValue('Roll No'),
+          name: getValue('Candidate Name') || getValue('Name'),
+          examLevel: getValue('Subject') || examConfig.name,
+          testDate: getValue('Exam Date') || getValue('Test Date'),
+          shift: getValue('Exam Time') || getValue('Test Time'),
+          centreName: getValue('Venue Name') || getValue('Centre Name'),
+        };
+      };
+      
+      const answerKeyCandidate = parseAnswerKeyCandidateInfo(html);
+      console.log('Parsed candidate:', answerKeyCandidate);
+      
+      // Calculate sections
+      const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
+      
+      // Calculate actual counts based on parsed questions
+      const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
+      const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
+      const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
+      const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
+      
+      console.log(`Scores - Correct: ${correctCount}, Wrong: ${wrongCount}, Unattempted: ${unattemptedCount}, Total: ${totalScore}`);
+      
+      const answerKeyResult: AnalysisResult = {
+        candidate: answerKeyCandidate,
+        examType,
+        examConfig,
+        language,
+        totalScore,
+        maxScore: examConfig.maxMarks,
+        totalQuestions: answerKeyQuestions.length,
+        correctCount,
+        wrongCount,
+        unattemptedCount,
+        sections: answerKeySections,
+        questions: answerKeyQuestions,
+      };
+      
+      console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
+      
+      return new Response(
+        JSON.stringify({ success: true, data: answerKeyResult }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Fetch all parts in parallel using direct fetch (FREE & UNLIMITED)
+    // Fetch all parts in parallel using enhanced browser impersonation
     const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
-      console.log(`Fetching Part ${part}:`, partUrl);
+      console.log(`[PART ${part}] Fetching:`, partUrl);
 
-      try {
-        // Direct fetch with browser-like headers
-        const response = await fetch(partUrl, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Cache-Control': 'max-age=0',
-          },
-        });
-
-        if (!response.ok) {
-          console.error(`Failed to fetch Part ${part}: HTTP ${response.status}`);
-          return { part, questions: [], html: '' };
-        }
-
-        const html = await response.text();
-        console.log(`Part ${part} HTML length:`, html.length);
-
-        const questions = parseQuestionsForPart(html, part, partUrl, subject, partOffsets[part]);
-        console.log(`Part ${part} questions count:`, questions.length);
-
-        return { part, questions, html };
-      } catch (error) {
-        console.error(`Error fetching Part ${part}:`, error);
-        return { part, questions: [], html: '' };
+      const fetchResult = await fetchWithBrowserHeaders(partUrl, url);
+      
+      if (!fetchResult.ok) {
+        console.error(`[PART ${part}] Fetch failed: ${fetchResult.error}`);
+        return { part, questions: [], html: '', error: fetchResult.error };
       }
+
+      const html = fetchResult.html;
+      console.log(`[PART ${part}] HTML length:`, html.length);
+
+      const questions = parseQuestionsForPart(html, part, fetchResult.finalUrl, subject, partOffsets[part]);
+      console.log(`[PART ${part}] Questions count:`, questions.length);
+
+      return { part, questions, html, error: null };
     });
 
     const results = await Promise.all(fetchPromises);

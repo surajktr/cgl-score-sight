@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { UrlInputForm } from '@/components/UrlInputForm';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
-import { analyzeResponseSheet } from '@/lib/api/analyzeSheet';
+import { analyzeResponseSheet, analyzeFromHtml } from '@/lib/api/analyzeSheet';
 import type { AnalysisResult } from '@/lib/mockData';
 import type { ExamType, Language } from '@/lib/examConfig';
 import { FileText, Shield, Zap } from 'lucide-react';
@@ -46,6 +46,37 @@ const Index = () => {
       setIsLoading(false);
     });
   };
+
+  const handleAnalyzeHtml = async (html: string, examType: ExamType, language: Language) => {
+    console.log('Analyzing pasted HTML, length:', html.length, 'Exam:', examType, 'Language:', language);
+    setIsLoading(true);
+    setAppState('loading');
+
+    // Start the API call with HTML
+    analysisPromise.current = analyzeFromHtml(html, examType, language).then(response => {
+      if (response.success && response.data) {
+        setAnalysisResult(response.data);
+      } else {
+        toast({
+          title: "Analysis Failed",
+          description: response.error || "Failed to analyze the pasted HTML",
+          variant: "destructive"
+        });
+        setAppState('input');
+      }
+      setIsLoading(false);
+    }).catch(error => {
+      console.error('Analysis error:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive"
+      });
+      setAppState('input');
+      setIsLoading(false);
+    });
+  };
+
   const handleLoadingComplete = () => {
     // Wait for analysis to complete if still running
     if (analysisPromise.current) {
@@ -99,7 +130,7 @@ const Index = () => {
           </div>
 
           {/* URL Input Form */}
-          <UrlInputForm onAnalyze={handleAnalyze} isLoading={isLoading} />
+          <UrlInputForm onAnalyze={handleAnalyze} onAnalyzeHtml={handleAnalyzeHtml} isLoading={isLoading} />
 
           {/* Trust Indicators */}
           <div className="flex flex-wrap justify-center gap-6 mt-12">
