@@ -2,185 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Comprehensive browser-like headers to bypass anti-bot detection
-const getBrowserHeaders = (referer?: string): HeadersInit => ({
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-  'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Connection': 'keep-alive',
-  'Upgrade-Insecure-Requests': '1',
-  'Cache-Control': 'max-age=0',
-  'Sec-Ch-Ua': '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-  'Sec-Ch-Ua-Mobile': '?0',
-  'Sec-Ch-Ua-Platform': '"Windows"',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': referer ? 'same-origin' : 'none',
-  'Sec-Fetch-User': '?1',
-  ...(referer ? { 'Referer': referer } : {}),
-});
-
-// Fetch using Firecrawl API (handles geo-blocks and anti-bot)
-async function fetchWithFirecrawl(
-  url: string
-): Promise<{ ok: boolean; html: string; error?: string }> {
-  const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
-  
-  if (!apiKey) {
-    console.log('[FIRECRAWL] API key not configured');
-    return { ok: false, html: '', error: 'Firecrawl API key not configured' };
-  }
-  
-  console.log(`[FIRECRAWL] Scraping URL: ${url}`);
-  
-  try {
-    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url,
-        formats: ['html', 'rawHtml'],
-        onlyMainContent: false,
-        waitFor: 3000, // Wait for dynamic content
-      }),
-    });
-    
-    const data = await response.json();
-    
-    if (!response.ok) {
-      console.error('[FIRECRAWL] API error:', data);
-      return { ok: false, html: '', error: data.error || `Firecrawl error: ${response.status}` };
-    }
-    
-    // Firecrawl returns data in data.data.rawHtml or data.data.html
-    const html = data.data?.rawHtml || data.data?.html || data.rawHtml || data.html || '';
-    
-    if (!html) {
-      console.error('[FIRECRAWL] No HTML content in response');
-      return { ok: false, html: '', error: 'Firecrawl returned no HTML content' };
-    }
-    
-    console.log(`[FIRECRAWL] Success! Received ${html.length} bytes`);
-    return { ok: true, html };
-    
-  } catch (error) {
-    console.error('[FIRECRAWL] Network error:', error);
-    return { ok: false, html: '', error: `Firecrawl error: ${error instanceof Error ? error.message : String(error)}` };
-  }
-}
-
-// Fetch with browser headers (direct fetch)
-async function fetchDirect(
-  url: string, 
-  referer?: string,
-  maxRedirects: number = 5
-): Promise<{ ok: boolean; status: number; statusText: string; html: string; finalUrl: string; error?: string }> {
-  let currentUrl = url;
-  let redirectCount = 0;
-  
-  console.log(`[DIRECT] Starting fetch for: ${url}`);
-  
-  while (redirectCount < maxRedirects) {
-    try {
-      const response = await fetch(currentUrl, {
-        method: 'GET',
-        headers: getBrowserHeaders(referer || currentUrl),
-        redirect: 'manual',
-      });
-      
-      console.log(`[DIRECT] Response status: ${response.status} ${response.statusText} for ${currentUrl}`);
-      
-      // Handle redirects
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get('Location');
-        if (!location) {
-          return { ok: false, status: response.status, statusText: 'Redirect without Location', html: '', finalUrl: currentUrl, error: 'Redirect without Location header' };
-        }
-        
-        const nextUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
-        console.log(`[DIRECT] Following redirect ${redirectCount + 1}: ${currentUrl} -> ${nextUrl}`);
-        referer = currentUrl;
-        currentUrl = nextUrl;
-        redirectCount++;
-        continue;
-      }
-      
-      if (!response.ok) {
-        console.error(`[DIRECT] HTTP Error: ${response.status} ${response.statusText}`);
-        return { ok: false, status: response.status, statusText: response.statusText, html: '', finalUrl: currentUrl, error: `HTTP ${response.status}: ${response.statusText}` };
-      }
-      
-      const html = await response.text();
-      console.log(`[DIRECT] Success! Received ${html.length} bytes from ${currentUrl}`);
-      
-      // Check for soft blocks
-      if (html.includes('Access Denied') || html.includes('Request Blocked') || html.includes('captcha')) {
-        console.warn(`[DIRECT] Soft block detected in response HTML`);
-        return { ok: false, status: 200, statusText: 'OK (but blocked)', html: '', finalUrl: currentUrl, error: 'The server returned a block page.' };
-      }
-      
-      return { ok: true, status: 200, statusText: 'OK', html, finalUrl: currentUrl };
-      
-    } catch (error) {
-      console.error(`[DIRECT] Network error:`, error);
-      return { ok: false, status: 0, statusText: 'Network Error', html: '', finalUrl: currentUrl, error: `Network error: ${error instanceof Error ? error.message : String(error)}` };
-    }
-  }
-  
-  return { ok: false, status: 0, statusText: 'Too Many Redirects', html: '', finalUrl: currentUrl, error: `Exceeded maximum redirects (${maxRedirects})` };
-}
-
-// Main fetch function: tries direct fetch first, falls back to Firecrawl on geo-blocks
-async function fetchWithBrowserHeaders(
-  url: string, 
-  referer?: string,
-  maxRedirects: number = 5
-): Promise<{ ok: boolean; status: number; statusText: string; html: string; finalUrl: string; error?: string }> {
-  // Try direct fetch first
-  const directResult = await fetchDirect(url, referer, maxRedirects);
-  
-  // If direct fetch succeeded, return it
-  if (directResult.ok) {
-    return directResult;
-  }
-  
-  // If blocked by geo/legal restrictions (451, 403), try Firecrawl
-  if (directResult.status === 451 || directResult.status === 403) {
-    console.log(`[FETCH] Direct fetch blocked (${directResult.status}), trying Firecrawl...`);
-    
-    const firecrawlResult = await fetchWithFirecrawl(url);
-    
-    if (firecrawlResult.ok) {
-      return { 
-        ok: true, 
-        status: 200, 
-        statusText: 'OK (via Firecrawl)', 
-        html: firecrawlResult.html, 
-        finalUrl: url 
-      };
-    }
-    
-    // Both failed - return Firecrawl error with context
-    return { 
-      ok: false, 
-      status: directResult.status, 
-      statusText: directResult.statusText, 
-      html: '', 
-      finalUrl: url, 
-      error: `Direct fetch blocked (${directResult.status}). Firecrawl fallback also failed: ${firecrawlResult.error}` 
-    };
-  }
-  
-  // Other errors - return direct result
-  return directResult;
-}
 
 interface CandidateInfo {
   rollNumber: string;
@@ -671,189 +494,6 @@ function parseQuestionsForPart(
 
   return questions;
 }
-
-// Parse answer key/response sheet format questions (AssessmentQPHTMLMode1 format)
-function parseAnswerKeyQuestions(
-  html: string,
-  baseUrl: string,
-  examConfig: ExamConfig
-): QuestionData[] {
-  console.log('=== ANSWER KEY PARSER V2 - Parsing new format ===');
-  const questions: QuestionData[] = [];
-  
-  // Helper function to resolve relative URLs
-  const resolveUrl = (src: string): string => {
-    if (!src) return '';
-    if (src.startsWith('http')) return src;
-    if (src.startsWith('/')) return baseUrl + src;
-    return baseUrl + '/' + src;
-  };
-  
-  // Helper function to get both Hindi and English image URLs
-  const getLanguageUrls = (imageUrl: string): { hindi?: string; english?: string } => {
-    if (!imageUrl) return {};
-    
-    // Check for _en or _hi suffix patterns (case insensitive)
-    const isEnglish = /_en\.(jpg|jpeg|png|gif)/i.test(imageUrl);
-    const isHindi = /_hi\.(jpg|jpeg|png|gif)/i.test(imageUrl);
-    
-    let hindiUrl = imageUrl;
-    let englishUrl = imageUrl;
-    
-    if (isEnglish) {
-      hindiUrl = imageUrl.replace(/_en\.([a-zA-Z]+)/i, '_hi.$1');
-    } else if (isHindi) {
-      englishUrl = imageUrl.replace(/_hi\.([a-zA-Z]+)/i, '_en.$1');
-    }
-    
-    return { hindi: hindiUrl, english: englishUrl };
-  };
-  
-  const optionIds = ['A', 'B', 'C', 'D'];
-  
-  // Find all question blocks - each question is in a <td class="rw"> containing a questionRowTbl
-  // Pattern: <td class="rw">...<table class="questionRowTbl">...</table>...</td>
-  const questionBlockPattern = /<td[^>]*class\s*=\s*["']rw["'][^>]*>([\s\S]*?)<\/td>\s*(?=<td[^>]*class\s*=\s*["']rw["']|$)/gi;
-  
-  // Alternative: find each questionRowTbl table and its sibling menu-tbl
-  const allRowTds = html.match(/<td[^>]*class\s*=\s*["']rw["'][^>]*>[\s\S]*?<\/td>/gi) || [];
-  console.log(`Found ${allRowTds.length} question blocks`);
-  
-  for (const rowTd of allRowTds) {
-    // Extract question number (Q.1, Q.2, etc.)
-    const qNumMatch = rowTd.match(/Q\.(\d+)/);
-    if (!qNumMatch) continue;
-    
-    const qNum = parseInt(qNumMatch[1]);
-    console.log(`Processing Q.${qNum}`);
-    
-    // Find the question image - it's in <td class="bold" valign="top">...<img src="...">
-    // The question image is the first img after Q.X in a bold td
-    const questionImgMatch = rowTd.match(/<td[^>]*class\s*=\s*["']bold["'][^>]*valign\s*=\s*["']top["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-    let questionImageUrl = questionImgMatch ? resolveUrl(questionImgMatch[1]) : '';
-    
-    // If not found, try alternative pattern
-    if (!questionImageUrl) {
-      const altQImgMatch = rowTd.match(/Q\.\d+<\/td><td[^>]*class\s*=\s*["']bold["'][^>]*>[\s\S]*?<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-      if (altQImgMatch) {
-        questionImageUrl = resolveUrl(altQImgMatch[1]);
-      }
-    }
-    
-    // Get Hindi and English URLs for question
-    const questionLangUrls = getLanguageUrls(questionImageUrl);
-    console.log(`Q${qNum} image:`, questionImageUrl?.substring(0, 80));
-    
-    // Parse options - look for td with wrngAns or rightAns class
-    // Format: <td class="wrngAns|rightAns">...<cross/tick>N. <img src="...">
-    const options: QuestionData['options'] = [];
-    
-    // Pattern to find all option tds
-    const optionTdPattern = /<td[^>]*class\s*=\s*["'](wrngAns|rightAns)["'][^>]*>([\s\S]*?)<\/td>/gi;
-    let optionMatch;
-    let optIdx = 0;
-    
-    while ((optionMatch = optionTdPattern.exec(rowTd)) !== null && optIdx < 4) {
-      const answerClass = optionMatch[1];
-      const optionContent = optionMatch[2];
-      
-      // Extract option image - format: N. <img src="...">
-      const optionImgMatch = optionContent.match(/\d+\.\s*<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-      const optionImgSrc = optionImgMatch ? resolveUrl(optionImgMatch[1]) : '';
-      
-      const isCorrect = answerClass === 'rightAns';
-      const optionLangUrls = getLanguageUrls(optionImgSrc);
-      
-      options.push({
-        id: optionIds[optIdx],
-        imageUrl: optionImgSrc,
-        imageUrlHindi: optionLangUrls.hindi || optionImgSrc,
-        imageUrlEnglish: optionLangUrls.english || optionImgSrc,
-        isSelected: false, // Will be set based on Chosen Option
-        isCorrect: isCorrect,
-      });
-      
-      console.log(`  Option ${optionIds[optIdx]}: ${isCorrect ? 'CORRECT ✓' : 'wrong'}`);
-      optIdx++;
-    }
-    
-    // Extract user's chosen option from menu-tbl
-    // Format: <td>Chosen Option :</td><td class="bold">4</td>
-    const chosenMatch = rowTd.match(/Chosen\s*Option\s*:<\/td>\s*<td[^>]*class\s*=\s*["']bold["'][^>]*>(\d+|--)/i);
-    const chosenOption = chosenMatch ? chosenMatch[1] : '--';
-    
-    // Mark selected option
-    if (chosenOption !== '--' && parseInt(chosenOption) >= 1 && parseInt(chosenOption) <= 4) {
-      const selectedIdx = parseInt(chosenOption) - 1;
-      if (options[selectedIdx]) {
-        options[selectedIdx].isSelected = true;
-      }
-    }
-    
-    // Ensure we have exactly 4 options
-    while (options.length < 4) {
-      options.push({
-        id: optionIds[options.length],
-        imageUrl: '',
-        imageUrlHindi: '',
-        imageUrlEnglish: '',
-        isSelected: false,
-        isCorrect: false,
-      });
-    }
-    
-    // Determine status based on selection and correctness
-    let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
-    const selectedOption = options.find(o => o.isSelected);
-    
-    if (selectedOption) {
-      status = selectedOption.isCorrect ? 'correct' : 'wrong';
-    }
-    
-    // Determine which part/subject this question belongs to
-    let currentPart = 'A';
-    let currentSubject = examConfig.subjects[0];
-    let qOffset = 0;
-    
-    for (const subject of examConfig.subjects) {
-      const partEnd = qOffset + subject.totalQuestions;
-      if (qNum <= partEnd) {
-        currentPart = subject.part;
-        currentSubject = subject;
-        break;
-      }
-      qOffset = partEnd;
-    }
-    
-    // Calculate marks
-    const marksAwarded = status === 'correct'
-      ? currentSubject.correctMarks
-      : status === 'wrong'
-        ? -currentSubject.negativeMarks
-        : 0;
-    
-    questions.push({
-      questionNumber: qNum,
-      part: currentPart,
-      subject: currentSubject.name,
-      questionImageUrl: questionImageUrl,
-      questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
-      questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
-      options,
-      status,
-      marksAwarded,
-    });
-    
-    console.log(`Parsed Q${qNum} - Part ${currentPart} - Status: ${status} - Chosen: ${chosenOption}`);
-  }
-  
-  // Sort by question number
-  questions.sort((a, b) => a.questionNumber - b.questionNumber);
-  
-  console.log(`Total questions parsed: ${questions.length}`);
-  return questions;
-}
-
 // Calculate section-wise breakdown
 function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
   const sections: SectionData[] = [];
@@ -888,132 +528,11 @@ serve(async (req) => {
   }
 
   try {
-    const { url, examType, language, html: directHtml } = await req.json();
-
-    // Check if user provided raw HTML directly (paste mode fallback)
-    if (directHtml && typeof directHtml === 'string' && directHtml.length > 1000) {
-      console.log('Processing direct HTML paste input, length:', directHtml.length);
-      
-      if (!examType || !EXAM_CONFIGS[examType]) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Valid exam type is required' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      const examConfig = EXAM_CONFIGS[examType];
-      
-      // Parse the pasted HTML using answer key parser
-      const answerKeyQuestions = parseAnswerKeyQuestions(directHtml, '', examConfig);
-      console.log('Parsed questions from pasted HTML:', answerKeyQuestions.length);
-      
-      if (answerKeyQuestions.length === 0) {
-        // Try the standard parser
-        const subject = examConfig.subjects[0];
-        const standardQuestions = parseQuestionsForPart(directHtml, 'A', '', subject, 0);
-        
-        if (standardQuestions.length === 0) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: 'Could not parse questions from the pasted HTML. Please ensure you copied the full page source.'
-            }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Process standard format
-        const parsedCandidate = parseCandidateInfo(directHtml);
-        const sections = calculateSections(standardQuestions, examConfig);
-        
-        const correctCount = standardQuestions.filter(q => q.status === 'correct').length;
-        const wrongCount = standardQuestions.filter(q => q.status === 'wrong').length;
-        const unattemptedCount = standardQuestions.filter(q => q.status === 'unattempted').length;
-        const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
-        
-        const result: AnalysisResult = {
-          candidate: parsedCandidate,
-          examType,
-          examConfig,
-          language,
-          totalScore,
-          maxScore: examConfig.maxMarks,
-          totalQuestions: standardQuestions.length,
-          correctCount,
-          wrongCount,
-          unattemptedCount,
-          sections,
-          questions: standardQuestions,
-        };
-        
-        return new Response(
-          JSON.stringify({ success: true, data: result }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Parse candidate info from pasted HTML
-      const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
-        const getValue = (label: string): string => {
-          const patterns = [
-            new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
-            new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
-            new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
-          ];
-          
-          for (const regex of patterns) {
-            const match = htmlContent.match(regex);
-            if (match) {
-              return match[1].replace(/&nbsp;/g, ' ').trim();
-            }
-          }
-          return '';
-        };
-        
-        return {
-          rollNumber: getValue('Roll Number') || getValue('Roll No'),
-          name: getValue('Candidate Name') || getValue('Name'),
-          examLevel: getValue('Subject') || examConfig.name,
-          testDate: getValue('Exam Date') || getValue('Test Date'),
-          shift: getValue('Exam Time') || getValue('Test Time'),
-          centreName: getValue('Venue Name') || getValue('Centre Name'),
-        };
-      };
-      
-      const answerKeyCandidate = parseAnswerKeyCandidateInfo(directHtml);
-      const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
-      
-      const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
-      const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
-      const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
-      const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
-      
-      const answerKeyResult: AnalysisResult = {
-        candidate: answerKeyCandidate,
-        examType,
-        examConfig,
-        language,
-        totalScore,
-        maxScore: examConfig.maxMarks,
-        totalQuestions: answerKeyQuestions.length,
-        correctCount,
-        wrongCount,
-        unattemptedCount,
-        sections: answerKeySections,
-        questions: answerKeyQuestions,
-      };
-      
-      console.log('Paste mode analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
-      
-      return new Response(
-        JSON.stringify({ success: true, data: answerKeyResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const { url, examType, language } = await req.json();
 
     if (!url) {
       return new Response(
-        JSON.stringify({ success: false, error: 'URL or HTML content is required' }),
+        JSON.stringify({ success: false, error: 'URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -1043,130 +562,101 @@ serve(async (req) => {
       questionOffset += subject.totalQuestions;
     }
 
-    // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern only, not generic .html)
-    // The standard ViewCandResponse.aspx URLs go through the multi-part fetch logic
-    const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1');
+    // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern)
+    const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1') || url.endsWith('.html');
     
     if (isAnswerKeyUrl) {
       console.log('Detected Answer Key URL format');
-      // For answer keys, fetch the single URL directly using enhanced browser impersonation
-      const fetchResult = await fetchWithBrowserHeaders(url);
-      
-      if (!fetchResult.ok) {
-        console.error(`Failed to fetch answer key: ${fetchResult.error}`);
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: fetchResult.error || `Failed to fetch answer key: HTTP ${fetchResult.status} ${fetchResult.statusText}`
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+      // For answer keys, fetch the single URL directly
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
+          },
+        });
 
-      const html = fetchResult.html;
-      console.log('Answer key HTML length:', html.length);
-      
-      // Extract base URL for resolving relative image paths
-      const urlObj = new URL(fetchResult.finalUrl);
-      const baseUrl = urlObj.origin;
-      
-      // Parse answer key format questions
-      const answerKeyQuestions = parseAnswerKeyQuestions(html, baseUrl, examConfig);
-      console.log('Answer key questions parsed:', answerKeyQuestions.length);
-      
-      if (answerKeyQuestions.length === 0) {
+        if (!response.ok) {
+          console.error(`Failed to fetch answer key: HTTP ${response.status}`);
+          return new Response(
+            JSON.stringify({ success: false, error: `Failed to fetch answer key: HTTP ${response.status}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const html = await response.text();
+        console.log('Answer key HTML length:', html.length);
+        console.log('Answer key HTML preview (first 5000 chars):', html.substring(0, 5000));
+        console.log('Answer key HTML contains "table":', html.includes('<table'));
+        console.log('Answer key HTML contains "Q.No":', html.includes('Q.No'));
+        console.log('Answer key HTML contains question patterns:', html.match(/Q[\.\s]*No|Question\s*No|Question\s*Number/gi)?.slice(0, 5));
+        
+        // Try to find any image patterns
+        const imgMatches = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
+        console.log('Image tags found:', imgMatches?.length || 0);
+        if (imgMatches && imgMatches.length > 0) {
+          console.log('First 5 image sources:', imgMatches.slice(0, 5));
+        }
+
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: 'Could not parse questions from the answer key. The format may have changed or the page content was blocked.'
+            error: 'Answer key format detected but parsing not yet implemented. Check logs for HTML structure.',
+            debug: {
+              htmlLength: html.length,
+              hasTable: html.includes('<table'),
+              hasQNo: html.includes('Q.No'),
+              imageCount: imgMatches?.length || 0
+            }
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      } catch (error) {
+        console.error('Error fetching answer key:', error);
+        return new Response(
+          JSON.stringify({ success: false, error: `Error fetching answer key: ${error}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-      
-      // Parse candidate info from this format
-      const parseAnswerKeyCandidateInfo = (htmlContent: string): CandidateInfo => {
-        const getValue = (label: string): string => {
-          const patterns = [
-            new RegExp(`${label}\\s*<\\/td>\\s*<td[^>]*>\\s*([^<]+)`, 'i'),
-            new RegExp(`${label}\\s*<\\/td>\\s*<td>\\s*([^<]+)`, 'i'),
-            new RegExp(`>${label}<\\/td>\\s*<td[^>]*>([^<]+)`, 'i'),
-          ];
-          
-          for (const regex of patterns) {
-            const match = htmlContent.match(regex);
-            if (match) {
-              return match[1].replace(/&nbsp;/g, ' ').trim();
-            }
-          }
-          return '';
-        };
-        
-        return {
-          rollNumber: getValue('Roll Number') || getValue('Roll No'),
-          name: getValue('Candidate Name') || getValue('Name'),
-          examLevel: getValue('Subject') || examConfig.name,
-          testDate: getValue('Exam Date') || getValue('Test Date'),
-          shift: getValue('Exam Time') || getValue('Test Time'),
-          centreName: getValue('Venue Name') || getValue('Centre Name'),
-        };
-      };
-      
-      const answerKeyCandidate = parseAnswerKeyCandidateInfo(html);
-      console.log('Parsed candidate:', answerKeyCandidate);
-      
-      // Calculate sections
-      const answerKeySections = calculateSections(answerKeyQuestions, examConfig);
-      
-      // Calculate actual counts based on parsed questions
-      const correctCount = answerKeyQuestions.filter(q => q.status === 'correct').length;
-      const wrongCount = answerKeyQuestions.filter(q => q.status === 'wrong').length;
-      const unattemptedCount = answerKeyQuestions.filter(q => q.status === 'unattempted').length;
-      const totalScore = answerKeySections.reduce((sum, s) => sum + s.score, 0);
-      
-      console.log(`Scores - Correct: ${correctCount}, Wrong: ${wrongCount}, Unattempted: ${unattemptedCount}, Total: ${totalScore}`);
-      
-      const answerKeyResult: AnalysisResult = {
-        candidate: answerKeyCandidate,
-        examType,
-        examConfig,
-        language,
-        totalScore,
-        maxScore: examConfig.maxMarks,
-        totalQuestions: answerKeyQuestions.length,
-        correctCount,
-        wrongCount,
-        unattemptedCount,
-        sections: answerKeySections,
-        questions: answerKeyQuestions,
-      };
-      
-      console.log('Answer key analysis complete. Questions:', answerKeyQuestions.length, 'Score:', totalScore);
-      
-      return new Response(
-        JSON.stringify({ success: true, data: answerKeyResult }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
-    // Fetch all parts in parallel using enhanced browser impersonation
+    // Fetch all parts in parallel using direct fetch (FREE & UNLIMITED)
     const fetchPromises = partUrls.map(async ({ part, url: partUrl, subject }) => {
-      console.log(`[PART ${part}] Fetching:`, partUrl);
+      console.log(`Fetching Part ${part}:`, partUrl);
 
-      const fetchResult = await fetchWithBrowserHeaders(partUrl, url);
-      
-      if (!fetchResult.ok) {
-        console.error(`[PART ${part}] Fetch failed: ${fetchResult.error}`);
-        return { part, questions: [], html: '', error: fetchResult.error };
+      try {
+        // Direct fetch with browser-like headers
+        const response = await fetch(partUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+          },
+        });
+
+        if (!response.ok) {
+          console.error(`Failed to fetch Part ${part}: HTTP ${response.status}`);
+          return { part, questions: [], html: '' };
+        }
+
+        const html = await response.text();
+        console.log(`Part ${part} HTML length:`, html.length);
+
+        const questions = parseQuestionsForPart(html, part, partUrl, subject, partOffsets[part]);
+        console.log(`Part ${part} questions count:`, questions.length);
+
+        return { part, questions, html };
+      } catch (error) {
+        console.error(`Error fetching Part ${part}:`, error);
+        return { part, questions: [], html: '' };
       }
-
-      const html = fetchResult.html;
-      console.log(`[PART ${part}] HTML length:`, html.length);
-
-      const questions = parseQuestionsForPart(html, part, fetchResult.finalUrl, subject, partOffsets[part]);
-      console.log(`[PART ${part}] Questions count:`, questions.length);
-
-      return { part, questions, html, error: null };
     });
 
     const results = await Promise.all(fetchPromises);
