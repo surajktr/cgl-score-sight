@@ -494,6 +494,254 @@ function parseQuestionsForPart(
 
   return questions;
 }
+// Parse the AssessmentQPHTMLMode1 answer key format
+function parseAnswerKeyFormat(
+  html: string, 
+  baseUrl: string, 
+  examConfig: ExamConfig
+): { questions: QuestionData[]; candidate: CandidateInfo } {
+  console.log('=== PARSING AssessmentQPHTMLMode1 FORMAT v2 ===');
+  
+  const questions: QuestionData[] = [];
+  
+  // Helper to resolve relative URLs
+  const resolveUrl = (src: string): string => {
+    if (!src) return '';
+    if (src.startsWith('http://') || src.startsWith('https://')) return src;
+    if (src.startsWith('//')) return 'https:' + src;
+    if (src.startsWith('/')) return baseUrl + src;
+    return baseUrl + '/' + src;
+  };
+
+  // Build a map of module numbers to subject configs
+  const moduleToSubject: Record<number, SubjectConfig> = {};
+  examConfig.subjects.forEach((subject, idx) => {
+    moduleToSubject[idx] = subject;
+  });
+
+  // Find all question panels using a simpler approach - find all divs with question-pnl class
+  // Split by question-pnl to get individual questions
+  const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
+  console.log('Found', questionPanels.length - 1, 'question panels');
+  
+  // Track current section/part
+  let currentPartIndex = 0;
+  let currentSubject = examConfig.subjects[0];
+  let currentPart = currentSubject.part;
+  let globalQuestionNumber = 0;
+  
+  // Find section boundaries - look for section-lbl divs
+  const sectionLabels: { index: number; name: string }[] = [];
+  const sectionLblRegex = /<div[^>]*class\s*=\s*["'][^"']*section-lbl[^"']*["'][^>]*>[\s\S]*?<span[^>]*class\s*=\s*["']bold["'][^>]*>([^<]+)<\/span>/gi;
+  let sectionMatch;
+  while ((sectionMatch = sectionLblRegex.exec(html)) !== null) {
+    sectionLabels.push({
+      index: sectionMatch.index,
+      name: sectionMatch[1].trim()
+    });
+  }
+  console.log('Found', sectionLabels.length, 'section labels:', sectionLabels.map(s => s.name));
+
+  // Process each question panel (skip first element which is before the first question)
+  for (let i = 1; i < questionPanels.length; i++) {
+    const panelContent = questionPanels[i];
+    globalQuestionNumber++;
+    
+    // Determine which section this question belongs to based on position
+    // For now, use Module pattern if available
+    let detectedModuleIndex = -1;
+    
+    // Check if we need to update the current part based on section labels
+    // (Simplified: assume sections appear in order as per exam config)
+    for (let s = 0; s < sectionLabels.length; s++) {
+      const label = sectionLabels[s].name;
+      const moduleMatch = label.match(/Module\s+([IV]+)/i);
+      if (moduleMatch) {
+        const romanToNum: Record<string, number> = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4 };
+        const moduleIdx = romanToNum[moduleMatch[1].toUpperCase()];
+        if (moduleIdx !== undefined && moduleIdx < examConfig.subjects.length) {
+          detectedModuleIndex = moduleIdx;
+        }
+      }
+    }
+    
+    // If first question in a new section, update part
+    if (detectedModuleIndex >= 0 && detectedModuleIndex < examConfig.subjects.length) {
+      currentSubject = examConfig.subjects[detectedModuleIndex];
+      currentPart = currentSubject.part;
+    }
+    
+    // Extract question number (Q.1, Q.2, etc.)
+    const qNumMatch = panelContent.match(/Q\.(\d+)/i);
+    const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
+    
+    // Extract question image - look for first image in the panel that's not a tick/cross
+    const allImgMatches = [...panelContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
+    let questionImageUrl = '';
+    
+    // First image after Q.X is typically the question image
+    for (const match of allImgMatches) {
+      const src = match[1];
+      if (!src.includes('tick') && !src.includes('cross')) {
+        questionImageUrl = resolveUrl(src);
+        break;
+      }
+    }
+    
+    const questionLangUrls = getLanguageUrlsFromImage(questionImageUrl);
+    
+    // Parse options by looking for answer rows
+    const options: QuestionData['options'] = [];
+    const optionIds = ['A', 'B', 'C', 'D'];
+    
+    // Find answer options - they have rightAns or wrngAns class
+    // Pattern: <td class="rightAns" or <td class="wrngAns"
+    const answerRowRegex = /<td[^>]*class\s*=\s*["'](rightAns|wrngAns)["'][^>]*>([\s\S]*?)(?=<\/td>)/gi;
+    let answerMatch;
+    let optIdx = 0;
+    
+    while ((answerMatch = answerRowRegex.exec(panelContent)) !== null && optIdx < 4) {
+      const rowClass = answerMatch[1];
+      const rowContent = answerMatch[2];
+      
+      const isCorrectAnswer = rowClass === 'rightAns';
+      const hasTickMark = rowContent.includes('tick.png');
+      
+      // Extract option image
+      let optionImageUrl = '';
+      const optImgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
+      let optImgMatch;
+      while ((optImgMatch = optImgRegex.exec(rowContent)) !== null) {
+        const src = optImgMatch[1];
+        if (!src.includes('tick') && !src.includes('cross')) {
+          optionImageUrl = resolveUrl(src);
+          break;
+        }
+      }
+      
+      const optionLangUrls = getLanguageUrlsFromImage(optionImageUrl);
+      
+      options.push({
+        id: optionIds[optIdx],
+        imageUrl: optionImageUrl,
+        imageUrlHindi: optionLangUrls.hindi || optionImageUrl,
+        imageUrlEnglish: optionLangUrls.english || optionImageUrl,
+        isSelected: hasTickMark,
+        isCorrect: isCorrectAnswer,
+      });
+      
+      optIdx++;
+    }
+    
+    // Get chosen option from the menu table
+    const chosenMatch = panelContent.match(/Chosen\s+Option\s*:[\s\S]*?<td[^>]*class\s*=\s*["']bold["'][^>]*>\s*([^<\s]+)/i);
+    const chosenOption = chosenMatch ? chosenMatch[1].trim() : '';
+    
+    // Determine status
+    let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
+    let hasSelected = options.some(o => o.isSelected);
+    
+    if (chosenOption === '--' || chosenOption === '' || chosenOption.includes('--')) {
+      status = 'unattempted';
+    } else {
+      // Parse chosen option number
+      const chosenNum = parseInt(chosenOption);
+      if (!isNaN(chosenNum) && chosenNum >= 1 && chosenNum <= 4) {
+        const chosenIdx = chosenNum - 1;
+        if (options[chosenIdx]) {
+          options[chosenIdx].isSelected = true;
+          hasSelected = true;
+          status = options[chosenIdx].isCorrect ? 'correct' : 'wrong';
+        }
+      } else if (hasSelected) {
+        const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
+        status = selectedIsCorrect ? 'correct' : 'wrong';
+      }
+    }
+    
+    // Calculate marks
+    const marksAwarded = status === 'correct'
+      ? currentSubject.correctMarks
+      : status === 'wrong'
+        ? -currentSubject.negativeMarks
+        : 0;
+    
+    // Ensure we have 4 options
+    while (options.length < 4) {
+      options.push({
+        id: optionIds[options.length],
+        imageUrl: '',
+        imageUrlHindi: '',
+        imageUrlEnglish: '',
+        isSelected: false,
+        isCorrect: false,
+      });
+    }
+    
+    questions.push({
+      questionNumber: globalQuestionNumber,
+      part: currentPart,
+      subject: currentSubject.name,
+      questionImageUrl,
+      questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
+      questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
+      options,
+      status,
+      marksAwarded,
+    });
+    
+    console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Chosen: ${chosenOption}, Status: ${status}, Marks: ${marksAwarded}`);
+  }
+  
+  // Extract candidate info if available
+  const candidate: CandidateInfo = {
+    rollNumber: extractValue(html, 'Roll No') || extractValue(html, 'Roll Number') || '',
+    name: extractValue(html, 'Candidate Name') || extractValue(html, 'Name') || '',
+    examLevel: examConfig.name,
+    testDate: extractValue(html, 'Test Date') || '',
+    shift: extractValue(html, 'Test Time') || extractValue(html, 'Shift') || '',
+    centreName: extractValue(html, 'Centre Name') || '',
+  };
+  
+  console.log('Total questions parsed:', questions.length);
+  
+  return { questions, candidate };
+}
+
+// Helper to extract value from HTML tables
+function extractValue(html: string, label: string): string {
+  const regex = new RegExp(label + `[^<]*</td>\\s*<td[^>]*>:?\\s*([^<]+)`, 'i');
+  const match = html.match(regex);
+  if (match) {
+    return match[1].replace(/&nbsp;/g, ' ').trim();
+  }
+  return '';
+}
+
+// Helper to get Hindi/English URLs from an image URL
+function getLanguageUrlsFromImage(imageUrl: string): { hindi?: string; english?: string } {
+  if (!imageUrl) return {};
+  
+  // Check for _en or _hi suffix in filename
+  const isEnglish = /_en\.(jpg|jpeg|png|gif)/i.test(imageUrl);
+  const isHindi = /_hi\.(jpg|jpeg|png|gif)/i.test(imageUrl);
+  
+  if (isEnglish) {
+    return {
+      english: imageUrl,
+      hindi: imageUrl.replace(/_en\.(jpg|jpeg|png|gif)/i, '_hi.$1'),
+    };
+  } else if (isHindi) {
+    return {
+      hindi: imageUrl,
+      english: imageUrl.replace(/_hi\.(jpg|jpeg|png|gif)/i, '_en.$1'),
+    };
+  }
+  
+  // Default: return the URL as both
+  return { hindi: imageUrl, english: imageUrl };
+}
+
 // Calculate section-wise breakdown
 function calculateSections(questions: QuestionData[], examConfig: ExamConfig): SectionData[] {
   const sections: SectionData[] = [];
@@ -528,7 +776,7 @@ serve(async (req) => {
   }
 
   try {
-    const { url, examType, language } = await req.json();
+    const { url, examType, language, html: providedHtml } = await req.json();
 
     if (!url) {
       return new Response(
@@ -546,6 +794,7 @@ serve(async (req) => {
 
     const examConfig = EXAM_CONFIGS[examType];
     console.log('Analyzing for exam:', examConfig.name, 'Language:', language);
+    console.log('HTML provided by client:', providedHtml ? `Yes, ${providedHtml.length} chars` : 'No');
 
     // Generate URLs for all parts based on exam config
     const partUrls = generatePartUrls(url, examConfig);
@@ -566,60 +815,108 @@ serve(async (req) => {
     const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1') || url.endsWith('.html');
     
     if (isAnswerKeyUrl) {
-      console.log('Detected Answer Key URL format');
-      // For answer keys, fetch the single URL directly
-      try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5,hi;q=0.3',
-          },
-        });
+      console.log('Detected Answer Key URL format - AssessmentQPHTMLMode1');
+      
+      // Extract base URL for resolving relative image paths
+      const urlObj = new URL(url);
+      const baseUrl = urlObj.origin;
+      
+      let html = providedHtml;
+      
+      // If HTML was not provided by client, try to fetch it server-side
+      if (!html) {
+        console.log('No HTML provided, attempting server-side fetch...');
+        
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1',
+              'Cache-Control': 'max-age=0',
+            },
+          });
 
-        if (!response.ok) {
-          console.error(`Failed to fetch answer key: HTTP ${response.status}`);
+          if (!response.ok) {
+            console.error(`Server-side fetch failed: HTTP ${response.status}`);
+            // Return special error code to indicate client-side fetch is needed
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: 'FETCH_BLOCKED',
+                message: 'The SSC server blocked the request. The page will attempt client-side fetching.',
+                requiresClientFetch: true
+              }),
+              { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          html = await response.text();
+          console.log('Server-side fetch successful, HTML length:', html.length);
+        } catch (fetchError) {
+          console.error('Server-side fetch error:', fetchError);
           return new Response(
-            JSON.stringify({ success: false, error: `Failed to fetch answer key: HTTP ${response.status}` }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            JSON.stringify({ 
+              success: false, 
+              error: 'FETCH_BLOCKED',
+              message: 'Unable to fetch the URL. The page will attempt client-side fetching.',
+              requiresClientFetch: true
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-
-        const html = await response.text();
-        console.log('Answer key HTML length:', html.length);
-        console.log('Answer key HTML preview (first 5000 chars):', html.substring(0, 5000));
-        console.log('Answer key HTML contains "table":', html.includes('<table'));
-        console.log('Answer key HTML contains "Q.No":', html.includes('Q.No'));
-        console.log('Answer key HTML contains question patterns:', html.match(/Q[\.\s]*No|Question\s*No|Question\s*Number/gi)?.slice(0, 5));
-        
-        // Try to find any image patterns
-        const imgMatches = html.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/gi);
-        console.log('Image tags found:', imgMatches?.length || 0);
-        if (imgMatches && imgMatches.length > 0) {
-          console.log('First 5 image sources:', imgMatches.slice(0, 5));
-        }
-
+      } else {
+        console.log('Using client-provided HTML, length:', html.length);
+      }
+      
+      // Parse the AssessmentQPHTMLMode1 format
+      const parsedData = parseAnswerKeyFormat(html, baseUrl, examConfig);
+      
+      if (parsedData.questions.length === 0) {
+        console.log('No questions found. HTML sample:', html.substring(0, 3000));
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: 'Answer key format detected but parsing not yet implemented. Check logs for HTML structure.',
-            debug: {
-              htmlLength: html.length,
-              hasTable: html.includes('<table'),
-              hasQNo: html.includes('Q.No'),
-              imageCount: imgMatches?.length || 0
-            }
+            error: 'Could not parse questions from this answer key format. The page structure may have changed or the HTML is incomplete.'
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      } catch (error) {
-        console.error('Error fetching answer key:', error);
-        return new Response(
-          JSON.stringify({ success: false, error: `Error fetching answer key: ${error}` }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
       }
+
+      // Calculate sections
+      const sections = calculateSections(parsedData.questions, examConfig);
+
+      // Calculate totals
+      const correctCount = parsedData.questions.filter(q => q.status === 'correct').length;
+      const wrongCount = parsedData.questions.filter(q => q.status === 'wrong').length;
+      const unattemptedCount = parsedData.questions.filter(q => q.status === 'unattempted').length;
+      const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
+
+      const analysisResult: AnalysisResult = {
+        candidate: parsedData.candidate,
+        examType,
+        examConfig,
+        language,
+        totalScore,
+        maxScore: examConfig.maxMarks,
+        totalQuestions: parsedData.questions.length,
+        correctCount,
+        wrongCount,
+        unattemptedCount,
+        sections,
+        questions: parsedData.questions,
+      };
+
+      console.log('Answer key analysis complete. Score:', totalScore, '/', examConfig.maxMarks);
+      console.log('Questions:', parsedData.questions.length, 'Correct:', correctCount, 'Wrong:', wrongCount, 'Unattempted:', unattemptedCount);
+
+      return new Response(
+        JSON.stringify({ success: true, data: analysisResult }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Fetch all parts in parallel using direct fetch (FREE & UNLIMITED)
