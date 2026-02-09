@@ -29,8 +29,9 @@ interface QuestionData {
     isSelected: boolean;
     isCorrect: boolean;
   }[];
-  status: 'correct' | 'wrong' | 'unattempted';
+  status: 'correct' | 'wrong' | 'unattempted' | 'bonus';
   marksAwarded: number;
+  isBonus?: boolean;
 }
 
 interface SectionData {
@@ -39,6 +40,7 @@ interface SectionData {
   correct: number;
   wrong: number;
   unattempted: number;
+  bonus: number;
   score: number;
   maxMarks: number;
   correctMarks: number;
@@ -77,6 +79,7 @@ interface AnalysisResult {
   correctCount: number;
   wrongCount: number;
   unattemptedCount: number;
+  bonusCount: number;
   sections: SectionData[];
   questions: QuestionData[];
 }
@@ -443,11 +446,18 @@ function parseQuestionsForPart(
         });
       }
 
-      let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
+      // Detect bonus question: no option is marked as correct
+      const hasCorrectOption = options.some(o => o.isCorrect);
+      const isBonus = !hasCorrectOption;
+      
+      let status: 'correct' | 'wrong' | 'unattempted' | 'bonus' = 'unattempted';
       const hasSelected = options.some(o => o.isSelected);
       const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
 
-      if (!hasSelected) {
+      if (isBonus) {
+        // Bonus question - all candidates get full marks
+        status = 'bonus';
+      } else if (!hasSelected) {
         status = 'unattempted';
       } else if (selectedIsCorrect) {
         status = 'correct';
@@ -456,11 +466,14 @@ function parseQuestionsForPart(
       }
 
       // Calculate marks based on exam-specific marking scheme
-      const marksAwarded = status === 'correct'
+      // Bonus questions get full marks
+      const marksAwarded = status === 'bonus'
         ? subject.correctMarks
-        : status === 'wrong'
-          ? -subject.negativeMarks
-          : 0;
+        : status === 'correct'
+          ? subject.correctMarks
+          : status === 'wrong'
+            ? -subject.negativeMarks
+            : 0;
 
       const actualQuestionNumber = questionOffset + qNum;
 
@@ -481,6 +494,7 @@ function parseQuestionsForPart(
         options,
         status,
         marksAwarded,
+        isBonus,
       });
 
       // Debug: Log final options for this question
@@ -637,11 +651,18 @@ function parseAnswerKeyFormat(
     const chosenMatch = panelContent.match(/Chosen\s+Option\s*:[\s\S]*?<td[^>]*class\s*=\s*["']bold["'][^>]*>\s*([^<\s]+)/i);
     const chosenOption = chosenMatch ? chosenMatch[1].trim() : '';
     
+    // Check for bonus question (no correct answer marked)
+    const hasCorrectOption = options.some(o => o.isCorrect);
+    const isBonus = !hasCorrectOption;
+    
     // Determine status
-    let status: 'correct' | 'wrong' | 'unattempted' = 'unattempted';
+    let status: 'correct' | 'wrong' | 'unattempted' | 'bonus' = 'unattempted';
     let hasSelected = options.some(o => o.isSelected);
     
-    if (chosenOption === '--' || chosenOption === '' || chosenOption.includes('--')) {
+    if (isBonus) {
+      // Bonus question - all candidates get full marks
+      status = 'bonus';
+    } else if (chosenOption === '--' || chosenOption === '' || chosenOption.includes('--')) {
       status = 'unattempted';
     } else {
       // Parse chosen option number
@@ -659,12 +680,14 @@ function parseAnswerKeyFormat(
       }
     }
     
-    // Calculate marks
-    const marksAwarded = status === 'correct'
+    // Calculate marks - bonus questions get full marks
+    const marksAwarded = status === 'bonus'
       ? currentSubject.correctMarks
-      : status === 'wrong'
-        ? -currentSubject.negativeMarks
-        : 0;
+      : status === 'correct'
+        ? currentSubject.correctMarks
+        : status === 'wrong'
+          ? -currentSubject.negativeMarks
+          : 0;
     
     // Ensure we have 4 options
     while (options.length < 4) {
@@ -688,9 +711,10 @@ function parseAnswerKeyFormat(
       options,
       status,
       marksAwarded,
+      isBonus,
     });
     
-    console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Chosen: ${chosenOption}, Status: ${status}, Marks: ${marksAwarded}`);
+    console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Chosen: ${chosenOption}, Status: ${status}, Marks: ${marksAwarded}, Bonus: ${isBonus}`);
   }
   
   // Extract candidate info if available
@@ -751,7 +775,10 @@ function calculateSections(questions: QuestionData[], examConfig: ExamConfig): S
     const correct = partQuestions.filter(q => q.status === 'correct').length;
     const wrong = partQuestions.filter(q => q.status === 'wrong').length;
     const unattempted = partQuestions.filter(q => q.status === 'unattempted').length;
-    const score = correct * subject.correctMarks - wrong * subject.negativeMarks;
+    const bonus = partQuestions.filter(q => q.status === 'bonus' || q.isBonus).length;
+    
+    // Score calculation: correct + bonus both get full marks
+    const score = (correct + bonus) * subject.correctMarks - wrong * subject.negativeMarks;
 
     sections.push({
       part: subject.part,
@@ -759,6 +786,7 @@ function calculateSections(questions: QuestionData[], examConfig: ExamConfig): S
       correct,
       wrong,
       unattempted,
+      bonus,
       score,
       maxMarks: subject.maxMarks,
       correctMarks: subject.correctMarks,
@@ -893,6 +921,7 @@ serve(async (req) => {
       const correctCount = parsedData.questions.filter(q => q.status === 'correct').length;
       const wrongCount = parsedData.questions.filter(q => q.status === 'wrong').length;
       const unattemptedCount = parsedData.questions.filter(q => q.status === 'unattempted').length;
+      const bonusCount = parsedData.questions.filter(q => q.status === 'bonus' || q.isBonus).length;
       const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
 
       const analysisResult: AnalysisResult = {
@@ -906,12 +935,13 @@ serve(async (req) => {
         correctCount,
         wrongCount,
         unattemptedCount,
+        bonusCount,
         sections,
         questions: parsedData.questions,
       };
 
       console.log('Answer key analysis complete. Score:', totalScore, '/', examConfig.maxMarks);
-      console.log('Questions:', parsedData.questions.length, 'Correct:', correctCount, 'Wrong:', wrongCount, 'Unattempted:', unattemptedCount);
+      console.log('Questions:', parsedData.questions.length, 'Correct:', correctCount, 'Wrong:', wrongCount, 'Unattempted:', unattemptedCount, 'Bonus:', bonusCount);
 
       return new Response(
         JSON.stringify({ success: true, data: analysisResult }),
@@ -1001,6 +1031,7 @@ serve(async (req) => {
     const correctCount = allQuestions.filter(q => q.status === 'correct').length;
     const wrongCount = allQuestions.filter(q => q.status === 'wrong').length;
     const unattemptedCount = allQuestions.filter(q => q.status === 'unattempted').length;
+    const bonusCount = allQuestions.filter(q => q.status === 'bonus' || q.isBonus).length;
     const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
 
     const analysisResult: AnalysisResult = {
@@ -1014,11 +1045,12 @@ serve(async (req) => {
       correctCount,
       wrongCount,
       unattemptedCount,
+      bonusCount,
       sections,
       questions: allQuestions,
     };
 
-    console.log('Analysis complete. Total score:', totalScore, '/', examConfig.maxMarks);
+    console.log('Analysis complete. Total score:', totalScore, '/', examConfig.maxMarks, 'Bonus:', bonusCount);
 
     return new Response(
       JSON.stringify({ success: true, data: analysisResult }),

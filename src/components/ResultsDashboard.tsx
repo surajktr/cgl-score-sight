@@ -115,6 +115,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
               correctCount={result.correctCount}
               wrongCount={result.wrongCount}
               unattemptedCount={result.unattemptedCount}
+              bonusCount={result.bonusCount || 0}
               examConfig={result.examConfig}
             />
           </div>

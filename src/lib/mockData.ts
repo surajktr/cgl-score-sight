@@ -24,8 +24,9 @@ export interface QuestionData {
     isSelected: boolean;
     isCorrect: boolean;
   }[];
-  status: 'correct' | 'wrong' | 'unattempted';
+  status: 'correct' | 'wrong' | 'unattempted' | 'bonus';
   marksAwarded: number;
+  isBonus?: boolean;
 }
 
 export interface SectionData {
@@ -34,6 +35,7 @@ export interface SectionData {
   correct: number;
   wrong: number;
   unattempted: number;
+  bonus: number;
   score: number;
   maxMarks: number;
   correctMarks: number;
@@ -52,6 +54,7 @@ export interface AnalysisResult {
   correctCount: number;
   wrongCount: number;
   unattemptedCount: number;
+  bonusCount: number;
   sections: SectionData[];
   questions: QuestionData[];
 }
@@ -77,11 +80,12 @@ export const mockAnalysisResult: AnalysisResult = {
   correctCount: 76,
   wrongCount: 13,
   unattemptedCount: 11,
+  bonusCount: 0,
   sections: [
-    { part: 'A', subject: 'General Intelligence & Reasoning', correct: 21, wrong: 2, unattempted: 2, score: 41, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
-    { part: 'B', subject: 'General Awareness', correct: 18, wrong: 4, unattempted: 3, score: 34, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
-    { part: 'C', subject: 'Quantitative Aptitude', correct: 19, wrong: 4, unattempted: 2, score: 36, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
-    { part: 'D', subject: 'English Comprehension', correct: 18, wrong: 3, unattempted: 4, score: 34.5, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'A', subject: 'General Intelligence & Reasoning', correct: 21, wrong: 2, unattempted: 2, bonus: 0, score: 41, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'B', subject: 'General Awareness', correct: 18, wrong: 4, unattempted: 3, bonus: 0, score: 34, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'C', subject: 'Quantitative Aptitude', correct: 19, wrong: 4, unattempted: 2, bonus: 0, score: 36, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
+    { part: 'D', subject: 'English Comprehension', correct: 18, wrong: 3, unattempted: 4, bonus: 0, score: 34.5, maxMarks: 50, correctMarks: 2, negativeMarks: 0.5 },
   ],
   questions: generateMockQuestions(),
 };
