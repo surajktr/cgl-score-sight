@@ -27,7 +27,7 @@ interface QuestionsTableProps {
   onLanguageChange?: (lang: DisplayLanguage) => void;
 }
 
-type StatusFilter = 'all' | 'correct' | 'wrong' | 'unattempted';
+type StatusFilter = 'all' | 'correct' | 'wrong' | 'unattempted' | 'bonus';
 type DownloadType = 'html-normal' | 'html-quiz' | 'pdf-hd';
 
 export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', onLanguageChange }: QuestionsTableProps) => {
@@ -43,17 +43,21 @@ export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', o
 
   const filteredQuestions = questions.filter((q) => {
     const partMatch = partFilter === 'all' || q.part === partFilter;
-    const statusMatch = statusFilter === 'all' || q.status === statusFilter;
+    const statusMatch = statusFilter === 'all' || q.status === statusFilter || 
+      (statusFilter === 'bonus' && q.isBonus);
     return partMatch && statusMatch;
   });
 
   const getStatusCount = (status: StatusFilter, part?: string) => {
     return questions.filter((q) => {
       const partMatch = !part || part === 'all' || q.part === part;
-      const statusMatch = status === 'all' || q.status === status;
+      const statusMatch = status === 'all' || q.status === status || 
+        (status === 'bonus' && q.isBonus);
       return partMatch && statusMatch;
     }).length;
   };
+  
+  const hasBonusQuestions = questions.some(q => q.status === 'bonus' || q.isBonus);
 
   const handleDownloadClick = (type: DownloadType) => {
     if (!result) return;
@@ -141,6 +145,9 @@ export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', o
               <option value="correct">Correct ({getStatusCount('correct', partFilter)})</option>
               <option value="wrong">Wrong ({getStatusCount('wrong', partFilter)})</option>
               <option value="unattempted">Skipped ({getStatusCount('unattempted', partFilter)})</option>
+              {hasBonusQuestions && (
+                <option value="bonus">Bonus ({getStatusCount('bonus', partFilter)})</option>
+              )}
             </select>
           </div>
           

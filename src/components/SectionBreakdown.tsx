@@ -1,4 +1,4 @@
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, Gift } from 'lucide-react';
 import type { SectionData } from '@/lib/mockData';
 
 interface SectionBreakdownProps {
@@ -7,6 +7,8 @@ interface SectionBreakdownProps {
 }
 
 export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) => {
+  const hasBonus = sections.some(s => (s.bonus || 0) > 0);
+  
   return (
     <div className="card-elevated p-4 sm:p-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
       <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -36,7 +38,7 @@ export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) 
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className={`grid gap-2 text-center ${hasBonus ? 'grid-cols-5' : 'grid-cols-4'}`}>
               <div className="p-2 rounded-md bg-correct-bg">
                 <div className="text-sm font-bold text-correct">{section.correct}</div>
                 <div className="text-xs text-correct/70">Correct</div>
@@ -49,6 +51,12 @@ export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) 
                 <div className="text-sm font-bold text-unattempted">{section.unattempted}</div>
                 <div className="text-xs text-unattempted/70">Skip</div>
               </div>
+              {hasBonus && (
+                <div className="p-2 rounded-md bg-purple-100">
+                  <div className="text-sm font-bold text-purple-700">{section.bonus || 0}</div>
+                  <div className="text-xs text-purple-600">Bonus</div>
+                </div>
+              )}
               <div className="p-2 rounded-md bg-primary/10">
                 <div className="text-sm font-bold text-primary">{section.score.toFixed(1)}</div>
                 <div className="text-xs text-primary/70">/{section.maxMarks}</div>
@@ -72,6 +80,14 @@ export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) 
               <th className="text-center py-3 px-2 text-xs font-semibold text-correct uppercase tracking-wider">Correct</th>
               <th className="text-center py-3 px-2 text-xs font-semibold text-wrong uppercase tracking-wider">Wrong</th>
               <th className="text-center py-3 px-2 text-xs font-semibold text-unattempted uppercase tracking-wider">Skipped</th>
+              {hasBonus && (
+                <th className="text-center py-3 px-2 text-xs font-semibold text-purple-600 uppercase tracking-wider">
+                  <span className="flex items-center justify-center gap-1">
+                    <Gift className="h-3 w-3" />
+                    Bonus
+                  </span>
+                </th>
+              )}
               <th className="text-right py-3 px-2 text-xs font-semibold text-primary uppercase tracking-wider">Score</th>
             </tr>
           </thead>
@@ -116,6 +132,13 @@ export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) 
                     {section.unattempted}
                   </span>
                 </td>
+                {hasBonus && (
+                  <td className="py-4 px-2 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[2rem] h-7 px-2 rounded-md bg-purple-100 text-purple-700 font-semibold text-sm">
+                      {section.bonus || 0}
+                    </span>
+                  </td>
+                )}
                 <td className="py-4 px-2 text-right">
                   <span className="score-display text-lg font-bold text-primary">{section.score.toFixed(1)}</span>
                   <span className="text-xs text-muted-foreground ml-1">/{section.maxMarks}</span>
@@ -141,6 +164,13 @@ export const SectionBreakdown = ({ sections, maxScore }: SectionBreakdownProps) 
                   {sections.reduce((sum, s) => sum + s.unattempted, 0)}
                 </span>
               </td>
+              {hasBonus && (
+                <td className="py-4 px-2 text-center">
+                  <span className="font-bold text-purple-700">
+                    {sections.reduce((sum, s) => sum + (s.bonus || 0), 0)}
+                  </span>
+                </td>
+              )}
               <td className="py-4 px-2 text-right">
                 <span className="score-display text-xl font-bold text-primary">
                   {sections.reduce((sum, s) => sum + s.score, 0).toFixed(1)}

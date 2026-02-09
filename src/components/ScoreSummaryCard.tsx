@@ -1,4 +1,4 @@
-import { Trophy, TrendingUp, Target } from 'lucide-react';
+import { Trophy, TrendingUp, Target, Gift } from 'lucide-react';
 import type { ExamConfig } from '@/lib/examConfig';
 
 interface ScoreSummaryCardProps {
@@ -7,6 +7,7 @@ interface ScoreSummaryCardProps {
   correctCount: number;
   wrongCount: number;
   unattemptedCount: number;
+  bonusCount?: number;
   examConfig: ExamConfig;
 }
 
@@ -16,10 +17,11 @@ export const ScoreSummaryCard = ({
   correctCount, 
   wrongCount, 
   unattemptedCount,
+  bonusCount = 0,
   examConfig
 }: ScoreSummaryCardProps) => {
   const percentage = (totalScore / maxScore) * 100;
-  const totalQuestions = correctCount + wrongCount + unattemptedCount;
+  const totalQuestions = correctCount + wrongCount + unattemptedCount + bonusCount;
   const attemptRate = ((correctCount + wrongCount) / totalQuestions) * 100;
   const accuracy = correctCount / (correctCount + wrongCount) * 100;
 
@@ -62,7 +64,7 @@ export const ScoreSummaryCard = ({
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4 lg:gap-6">
+        <div className={`grid gap-2 sm:gap-4 lg:gap-6 ${bonusCount > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <div className="text-center p-2 sm:p-4 rounded-xl bg-correct-bg">
             <div className="score-display text-xl sm:text-2xl font-bold text-correct">{correctCount}</div>
             <div className="text-xs text-correct/80 font-medium mt-1">Correct</div>
@@ -75,6 +77,15 @@ export const ScoreSummaryCard = ({
             <div className="score-display text-xl sm:text-2xl font-bold text-unattempted">{unattemptedCount}</div>
             <div className="text-xs text-unattempted/80 font-medium mt-1">Skipped</div>
           </div>
+          {bonusCount > 0 && (
+            <div className="text-center p-2 sm:p-4 rounded-xl bg-purple-100">
+              <div className="score-display text-xl sm:text-2xl font-bold text-purple-700 flex items-center justify-center gap-1">
+                <Gift className="h-4 w-4 sm:h-5 sm:w-5" />
+                {bonusCount}
+              </div>
+              <div className="text-xs text-purple-600 font-medium mt-1">Bonus</div>
+            </div>
+          )}
         </div>
       </div>
 
