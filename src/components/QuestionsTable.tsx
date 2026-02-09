@@ -3,13 +3,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { QuestionCard } from './QuestionCard';
 import type { AnalysisResult, QuestionData } from '@/lib/mockData';
-import { FileText, Filter, Download, Loader2, BookOpen, Gamepad2, Languages } from 'lucide-react';
+import { FileText, Filter, Download, Loader2, BookOpen, Gamepad2, Languages, FileImage } from 'lucide-react';
 import { useHtmlGenerator, type HtmlMode } from '@/hooks/useHtmlGenerator';
+import { usePdfGeneratorHD } from '@/hooks/usePdfGeneratorHD';
 import { useToast } from '@/hooks/use-toast';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DownloadLanguageDialog, type DownloadLanguage } from './DownloadLanguageDialog';
@@ -24,15 +28,16 @@ interface QuestionsTableProps {
 }
 
 type StatusFilter = 'all' | 'correct' | 'wrong' | 'unattempted';
+type DownloadType = 'html-normal' | 'html-quiz' | 'pdf-hd';
 
 export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', onLanguageChange }: QuestionsTableProps) => {
   const [partFilter, setPartFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const { generateHtml, isGenerating } = useHtmlGenerator();
+  const { generateHtml, isGenerating: isGeneratingHtml } = useHtmlGenerator();
+  const { generatePdf: generatePdfHD, isGenerating: isGeneratingPdf, progress: pdfProgress } = usePdfGeneratorHD();
   const { toast } = useToast();
   const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
-  const [pendingDownloadMode, setPendingDownloadMode] = useState<HtmlMode>('normal');
-
+  const [pendingDownloadType, setPendingDownloadType] = useState<DownloadType>('html-normal');
   // Get unique parts from questions
   const availableParts = [...new Set(questions.map(q => q.part))].sort();
 
@@ -50,27 +55,37 @@ export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', o
     }).length;
   };
 
-  const handleDownloadClick = (mode: HtmlMode) => {
+  const handleDownloadClick = (type: DownloadType) => {
     if (!result) return;
-    setPendingDownloadMode(mode);
+    setPendingDownloadType(type);
     setLanguageDialogOpen(true);
   };
 
   const handleDownloadConfirm = async (downloadLanguage: DownloadLanguage) => {
     if (!result) return;
+    
     try {
-      await generateHtml(result, pendingDownloadMode, downloadLanguage);
-      toast({
-        title: pendingDownloadMode === 'quiz' ? "Quiz Downloaded" : "Answer Key Downloaded",
-        description: pendingDownloadMode === 'quiz' 
-          ? "Interactive quiz file has been downloaded." 
-          : "Complete answer key has been downloaded.",
-      });
+      if (pendingDownloadType === 'pdf-hd') {
+        await generatePdfHD(result, downloadLanguage);
+        toast({
+          title: "HD PDF Downloaded",
+          description: "Full HD PDF with all questions has been downloaded.",
+        });
+      } else {
+        const mode: HtmlMode = pendingDownloadType === 'html-quiz' ? 'quiz' : 'normal';
+        await generateHtml(result, mode, downloadLanguage);
+        toast({
+          title: mode === 'quiz' ? "Quiz Downloaded" : "Answer Key Downloaded",
+          description: mode === 'quiz' 
+            ? "Interactive quiz file has been downloaded." 
+            : "Complete answer key has been downloaded.",
+        });
+      }
     } catch (error) {
-      console.error('HTML generation failed:', error);
+      console.error('Download failed:', error);
       toast({
         title: "Download Failed",
-        description: "Failed to generate HTML file. Please try again.",
+        description: "Failed to generate file. Please try again.",
         variant: "destructive",
       });
     }
@@ -135,30 +150,48 @@ export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', o
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={isGenerating}
+                  disabled={isGeneratingHtml || isGeneratingPdf}
                   className="gap-2"
                 >
-                  {isGenerating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {(isGeneratingHtml || isGeneratingPdf) ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {isGeneratingPdf && <span className="text-xs">{pdfProgress}%</span>}
+                    </>
                   ) : (
                     <Download className="h-4 w-4" />
                   )}
                   <span className="hidden sm:inline">Download</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => handleDownloadClick('normal')} className="gap-2 cursor-pointer">
-                  <BookOpen className="h-4 w-4" />
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2">
+                    <BookOpen className="h-4 w-4" />
+                    <span>HTML Format</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => handleDownloadClick('html-normal')} className="gap-2 cursor-pointer">
+                      <BookOpen className="h-4 w-4" />
+                      <div>
+                        <div className="font-medium">Normal Mode</div>
+                        <div className="text-xs text-muted-foreground">With answers visible</div>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDownloadClick('html-quiz')} className="gap-2 cursor-pointer">
+                      <Gamepad2 className="h-4 w-4" />
+                      <div>
+                        <div className="font-medium">Quiz Mode</div>
+                        <div className="text-xs text-muted-foreground">Interactive practice</div>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem onClick={() => handleDownloadClick('pdf-hd')} className="gap-2 cursor-pointer">
+                  <FileImage className="h-4 w-4" />
                   <div>
-                    <div className="font-medium">Normal Mode</div>
-                    <div className="text-xs text-muted-foreground">With answers visible</div>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleDownloadClick('quiz')} className="gap-2 cursor-pointer">
-                  <Gamepad2 className="h-4 w-4" />
-                  <div>
-                    <div className="font-medium">Quiz Mode</div>
-                    <div className="text-xs text-muted-foreground">Interactive practice</div>
+                    <div className="font-medium">PDF HD</div>
+                    <div className="text-xs text-muted-foreground">Full quality images</div>
                   </div>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -171,7 +204,7 @@ export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', o
         open={languageDialogOpen}
         onOpenChange={setLanguageDialogOpen}
         onConfirm={handleDownloadConfirm}
-        mode={pendingDownloadMode}
+        mode={pendingDownloadType === 'html-quiz' ? 'quiz' : 'normal'}
       />
       <Tabs value={partFilter} onValueChange={setPartFilter}>
         <TabsList className="w-full justify-start mb-6 bg-muted/50 p-1 h-auto flex-wrap gap-1">
