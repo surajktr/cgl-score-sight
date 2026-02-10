@@ -76,20 +76,23 @@ export const useHtmlGenerator = () => {
           for (const option of question.options) {
             const isCorrectAnswer = option.isCorrect;
             const optionImg = getOptionImageUrl(option);
+            const hasOptionText = option.text && option.text.trim() !== '';
             
-            // Build option image HTML based on language
-            let optionImageHtml = '';
-            if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg) {
-              optionImageHtml = `
+            // Build option content HTML based on text or image
+            let optionContentHtml = '';
+            if (hasOptionText) {
+              optionContentHtml = `<span class="option-text-content">${option.text}</span>`;
+            } else if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg) {
+              optionContentHtml = `
                 <div class="option-images bilingual">
                   ${optionImg.hindi ? `<img src="${optionImg.hindi}" alt="Option ${option.id} (Hindi)" class="option-image" loading="lazy" />` : ''}
                   ${optionImg.english ? `<img src="${optionImg.english}" alt="Option ${option.id} (English)" class="option-image" loading="lazy" />` : ''}
                 </div>
               `;
             } else if ('single' in optionImg && optionImg.single) {
-              optionImageHtml = `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
+              optionContentHtml = `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
             } else {
-              optionImageHtml = `<span class="option-text">Option ${option.id}</span>`;
+              optionContentHtml = `<span class="option-text">Option ${option.id}</span>`;
             }
             
             // In normal mode: show correct answer highlighted
@@ -101,31 +104,36 @@ export const useHtmlGenerator = () => {
               optionsHtml += `
                 <div class="option ${optionClass}">
                   <span class="option-label ${labelClass}">${option.id}</span>
-                  ${optionImageHtml}
+                  ${optionContentHtml}
                 </div>
               `;
             } else {
-              // Quiz mode - answer hidden initially
               optionsHtml += `
                 <div class="option quiz-option" data-correct="${isCorrectAnswer}" onclick="revealAnswer(this)">
                   <span class="option-label label-default">${option.id}</span>
-                  ${optionImageHtml}
+                  ${optionContentHtml}
                 </div>
               `;
             }
           }
           
-          // Build question image HTML based on language
-          let questionImageHtml = '';
+          // Build question content HTML
+          let questionContentHtml = '';
+          const hasQuestionText = question.questionText && question.questionText.trim() !== '';
+          
+          if (hasQuestionText) {
+            questionContentHtml += `<p class="question-text-content">${question.questionText}</p>`;
+          }
+          
           if (questionImg.bilingual && 'hindi' in questionImg && 'english' in questionImg) {
-            questionImageHtml = `
+            questionContentHtml += `
               <div class="question-images bilingual">
                 ${questionImg.hindi ? `<div class="lang-section"><span class="lang-label">हिंदी</span><img src="${questionImg.hindi}" alt="Question ${globalQuestionNumber} (Hindi)" class="question-image" loading="lazy" /></div>` : ''}
                 ${questionImg.english ? `<div class="lang-section"><span class="lang-label">English</span><img src="${questionImg.english}" alt="Question ${globalQuestionNumber} (English)" class="question-image" loading="lazy" /></div>` : ''}
               </div>
             `;
           } else if ('single' in questionImg && questionImg.single) {
-            questionImageHtml = `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
+            questionContentHtml += `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
           }
           
           questionsHtml += `
@@ -133,8 +141,8 @@ export const useHtmlGenerator = () => {
               <div class="question-header">
                 <span class="question-number">Q.${globalQuestionNumber}</span>
               </div>
-              <div class="question-image-container">
-                ${questionImageHtml}
+              <div class="question-content-container">
+                ${questionContentHtml}
               </div>
               <div class="options">
                 ${optionsHtml}
@@ -396,6 +404,23 @@ export const useHtmlGenerator = () => {
     .option-text {
       font-size: 14px;
       color: #64748b;
+    }
+    
+    .option-text-content {
+      font-size: 14px;
+      color: #1e293b;
+      line-height: 1.5;
+    }
+    
+    .question-text-content {
+      font-size: 15px;
+      color: #1e293b;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    
+    .question-content-container {
+      margin-bottom: 16px;
     }
     
     .show-answer-btn {

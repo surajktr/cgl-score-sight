@@ -539,18 +539,71 @@ function parseQuestionsForPart(
 
   return questions;
 }
-// Helper: strip HTML tags and decode entities
+// Helper: strip HTML tags and decode entities, preserve special chars
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]*>/g, '')
+  // First handle superscript/subscript by converting to unicode-like representation
+  let text = html
+    .replace(/<sup[^>]*>\s*2\s*<\/sup>/gi, '²')
+    .replace(/<sup[^>]*>\s*3\s*<\/sup>/gi, '³')
+    .replace(/<sup[^>]*>\s*(\d+)\s*<\/sup>/gi, '^$1')
+    .replace(/<sub[^>]*>\s*(\d+)\s*<\/sub>/gi, '₍$1₎')
+    .replace(/<br\s*\/?>/gi, '\n');
+  
+  // Strip remaining HTML tags
+  text = text.replace(/<[^>]*>/g, '');
+  
+  // Decode HTML entities - comprehensive list
+  text = text
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/&apos;/g, "'")
+    .replace(/&lsquo;/g, '\u2018')
+    .replace(/&rsquo;/g, '\u2019')
+    .replace(/&ldquo;/g, '\u201C')
+    .replace(/&rdquo;/g, '\u201D')
+    .replace(/&minus;/g, '\u2212')
+    .replace(/&ndash;/g, '\u2013')
+    .replace(/&mdash;/g, '\u2014')
+    .replace(/&times;/g, '\u00D7')
+    .replace(/&divide;/g, '\u00F7')
+    .replace(/&plusmn;/g, '\u00B1')
+    .replace(/&le;/g, '\u2264')
+    .replace(/&ge;/g, '\u2265')
+    .replace(/&ne;/g, '\u2260')
+    .replace(/&sup2;/g, '\u00B2')
+    .replace(/&sup3;/g, '\u00B3')
+    .replace(/&frac12;/g, '\u00BD')
+    .replace(/&frac14;/g, '\u00BC')
+    .replace(/&frac34;/g, '\u00BE')
+    .replace(/&deg;/g, '\u00B0')
+    .replace(/&pi;/g, '\u03C0')
+    .replace(/&alpha;/g, '\u03B1')
+    .replace(/&beta;/g, '\u03B2')
+    .replace(/&gamma;/g, '\u03B3')
+    .replace(/&delta;/g, '\u03B4')
+    .replace(/&theta;/g, '\u03B8')
+    .replace(/&sigma;/g, '\u03C3')
+    .replace(/&radic;/g, '\u221A')
+    .replace(/&infin;/g, '\u221E')
+    .replace(/&rarr;/g, '\u2192')
+    .replace(/&larr;/g, '\u2190')
+    .replace(/&darr;/g, '\u2193')
+    .replace(/&uarr;/g, '\u2191')
+    .replace(/&bull;/g, '\u2022')
+    .replace(/&hellip;/g, '\u2026')
+    .replace(/&trade;/g, '\u2122')
+    .replace(/&copy;/g, '\u00A9')
+    .replace(/&reg;/g, '\u00AE')
+    .replace(/&rupee;/g, '\u20B9')
+    // Numeric entities
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+  
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 // Parse the AssessmentQPHTMLMode1 answer key format
