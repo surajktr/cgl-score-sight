@@ -120,8 +120,13 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
         </div>
       </div>
 
-      {/* Question Image */}
+      {/* Question Content - Text and/or Image */}
       <div className="mb-3">
+        {question.questionText && (
+          <p className="text-foreground text-sm leading-relaxed mb-2">
+            {question.questionText}
+          </p>
+        )}
         {hasQuestionImage ? (
           <img 
             src={questionImageUrl} 
@@ -133,11 +138,11 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
               target.style.display = 'none';
             }}
           />
-        ) : (
+        ) : !question.questionText ? (
           <div className="text-muted-foreground text-sm italic py-2">
             Question image not available
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Options - Vertical Layout */}
@@ -145,16 +150,19 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
         {question.options.map((option) => {
           const optionImageUrl = getOptionImage(option);
           const hasOptionImage = optionImageUrl && optionImageUrl.trim() !== '';
+          const hasOptionText = option.text && option.text.trim() !== '';
           
           return (
             <div 
               key={option.id}
               className={`flex items-center gap-3 py-1 px-2 rounded ${getOptionClass(option)}`}
             >
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${getOptionLabelClass(option)}`}>
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getOptionLabelClass(option)}`}>
                 {option.id}
               </span>
-              {hasOptionImage ? (
+              {hasOptionText ? (
+                <span className="text-foreground text-sm">{option.text}</span>
+              ) : hasOptionImage ? (
                 <img 
                   src={optionImageUrl}
                   alt={`Option ${option.id}`}

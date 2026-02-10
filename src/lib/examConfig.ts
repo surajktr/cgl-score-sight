@@ -5,8 +5,10 @@ export type ExamType =
   | 'SSC_CHSL_MAINS'
   | 'SSC_CPO_PRE'
   | 'SSC_CPO_MAINS'
+  | 'SSC_MTS'
   | 'DELHI_POLICE_CONSTABLE'
-  | 'DELHI_POLICE_HEAD_CONSTABLE';
+  | 'DELHI_POLICE_HEAD_CONSTABLE'
+  | 'IB_ACIO';
 
 export type Language = 'hindi' | 'english';
 
@@ -113,6 +115,20 @@ export const EXAM_CONFIGS: Record<ExamType, ExamConfig> = {
     totalQuestions: 200,
     maxMarks: 200,
   },
+  SSC_MTS: {
+    id: 'SSC_MTS',
+    name: 'SSC MTS (CBT)',
+    displayName: 'SSC MTS',
+    emoji: '🟠',
+    subjects: [
+      { name: 'Numerical & Mathematical Ability', part: 'A', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Reasoning Ability & Problem Solving', part: 'B', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'General Awareness', part: 'C', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Language & Comprehension', part: 'D', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 90,
+    maxMarks: 90,
+  },
   DELHI_POLICE_CONSTABLE: {
     id: 'DELHI_POLICE_CONSTABLE',
     name: 'Delhi Police Constable (CBT)',
@@ -138,6 +154,21 @@ export const EXAM_CONFIGS: Record<ExamType, ExamConfig> = {
       { name: 'Reasoning', part: 'C', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
       { name: 'English Language', part: 'D', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
       { name: 'Computer Fundamentals', part: 'E', totalQuestions: 10, maxMarks: 10, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 100,
+  },
+  IB_ACIO: {
+    id: 'IB_ACIO',
+    name: 'IB ACIO (Tier-I)',
+    displayName: 'IB ACIO',
+    emoji: '🕵️',
+    subjects: [
+      { name: 'Current Affairs', part: 'A', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'General Studies', part: 'B', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Quantitative Aptitude', part: 'C', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Logical/Analytical Ability', part: 'D', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Language', part: 'E', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
     ],
     totalQuestions: 100,
     maxMarks: 100,
