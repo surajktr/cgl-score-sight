@@ -21,11 +21,13 @@ interface QuestionData {
   questionImageUrl: string;
   questionImageUrlHindi?: string;
   questionImageUrlEnglish?: string;
+  questionText?: string;
   options: {
     id: string;
     imageUrl: string;
     imageUrlHindi?: string;
     imageUrlEnglish?: string;
+    text?: string;
     isSelected: boolean;
     isCorrect: boolean;
   }[];
@@ -193,6 +195,35 @@ const EXAM_CONFIGS: Record<string, ExamConfig> = {
       { name: 'Reasoning', part: 'C', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
       { name: 'English Language', part: 'D', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
       { name: 'Computer Fundamentals', part: 'E', totalQuestions: 10, maxMarks: 10, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 100,
+    maxMarks: 100,
+  },
+  SSC_MTS: {
+    id: 'SSC_MTS',
+    name: 'SSC MTS (CBT)',
+    displayName: 'SSC MTS',
+    emoji: '🟠',
+    subjects: [
+      { name: 'Numerical & Mathematical Ability', part: 'A', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Reasoning Ability & Problem Solving', part: 'B', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'General Awareness', part: 'C', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Language & Comprehension', part: 'D', totalQuestions: 25, maxMarks: 25, correctMarks: 1, negativeMarks: 0.25 },
+    ],
+    totalQuestions: 90,
+    maxMarks: 90,
+  },
+  IB_ACIO: {
+    id: 'IB_ACIO',
+    name: 'IB ACIO (Tier-I)',
+    displayName: 'IB ACIO',
+    emoji: '🕵️',
+    subjects: [
+      { name: 'Current Affairs', part: 'A', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'General Studies', part: 'B', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Quantitative Aptitude', part: 'C', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'Logical/Analytical Ability', part: 'D', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
+      { name: 'English Language', part: 'E', totalQuestions: 20, maxMarks: 20, correctMarks: 1, negativeMarks: 0.25 },
     ],
     totalQuestions: 100,
     maxMarks: 100,
@@ -508,13 +539,27 @@ function parseQuestionsForPart(
 
   return questions;
 }
+// Helper: strip HTML tags and decode entities
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Parse the AssessmentQPHTMLMode1 answer key format
 function parseAnswerKeyFormat(
   html: string, 
   baseUrl: string, 
   examConfig: ExamConfig
 ): { questions: QuestionData[]; candidate: CandidateInfo } {
-  console.log('=== PARSING AssessmentQPHTMLMode1 FORMAT v2 ===');
+  console.log('=== PARSING AssessmentQPHTMLMode1 FORMAT v3 (text+image support) ===');
   
   const questions: QuestionData[] = [];
   
@@ -527,24 +572,7 @@ function parseAnswerKeyFormat(
     return baseUrl + '/' + src;
   };
 
-  // Build a map of module numbers to subject configs
-  const moduleToSubject: Record<number, SubjectConfig> = {};
-  examConfig.subjects.forEach((subject, idx) => {
-    moduleToSubject[idx] = subject;
-  });
-
-  // Find all question panels using a simpler approach - find all divs with question-pnl class
-  // Split by question-pnl to get individual questions
-  const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
-  console.log('Found', questionPanels.length - 1, 'question panels');
-  
-  // Track current section/part
-  let currentPartIndex = 0;
-  let currentSubject = examConfig.subjects[0];
-  let currentPart = currentSubject.part;
-  let globalQuestionNumber = 0;
-  
-  // Find section boundaries - look for section-lbl divs
+  // Find all section labels with their positions in the HTML
   const sectionLabels: { index: number; name: string }[] = [];
   const sectionLblRegex = /<div[^>]*class\s*=\s*["'][^"']*section-lbl[^"']*["'][^>]*>[\s\S]*?<span[^>]*class\s*=\s*["']bold["'][^>]*>([^<]+)<\/span>/gi;
   let sectionMatch;
@@ -556,49 +584,105 @@ function parseAnswerKeyFormat(
   }
   console.log('Found', sectionLabels.length, 'section labels:', sectionLabels.map(s => s.name));
 
+  // Map section names to exam config subjects
+  // Try matching by name similarity or by order
+  const sectionToSubjectIndex: Record<number, number> = {};
+  sectionLabels.forEach((section, idx) => {
+    // First try Module pattern (Module I, II, III...)
+    const moduleMatch = section.name.match(/Module\s+([IV]+)/i);
+    if (moduleMatch) {
+      const romanToNum: Record<string, number> = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4 };
+      const moduleIdx = romanToNum[moduleMatch[1].toUpperCase()];
+      if (moduleIdx !== undefined && moduleIdx < examConfig.subjects.length) {
+        sectionToSubjectIndex[idx] = moduleIdx;
+        return;
+      }
+    }
+    // Otherwise map by order
+    if (idx < examConfig.subjects.length) {
+      sectionToSubjectIndex[idx] = idx;
+    }
+  });
+
+  // Find all question-pnl positions to map them to sections
+  const questionPanelPositions: number[] = [];
+  const qpnlRegex = /class\s*=\s*["']question-pnl["']/gi;
+  let qpnlMatch;
+  while ((qpnlMatch = qpnlRegex.exec(html)) !== null) {
+    questionPanelPositions.push(qpnlMatch.index);
+  }
+
+  // Map each question position to its section
+  const getSubjectForPosition = (pos: number): { subject: SubjectConfig; part: string } => {
+    let sectionIdx = 0;
+    for (let s = sectionLabels.length - 1; s >= 0; s--) {
+      if (pos > sectionLabels[s].index) {
+        sectionIdx = s;
+        break;
+      }
+    }
+    const subjectIdx = sectionToSubjectIndex[sectionIdx] ?? Math.min(sectionIdx, examConfig.subjects.length - 1);
+    const subject = examConfig.subjects[subjectIdx];
+    return { subject, part: subject.part };
+  };
+
+  // Split by question-pnl to get individual questions
+  const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
+  console.log('Found', questionPanels.length - 1, 'question panels');
+  
+  let globalQuestionNumber = 0;
+
   // Process each question panel (skip first element which is before the first question)
   for (let i = 1; i < questionPanels.length; i++) {
     const panelContent = questionPanels[i];
     globalQuestionNumber++;
     
-    // Determine which section this question belongs to based on position
-    // For now, use Module pattern if available
-    let detectedModuleIndex = -1;
-    
-    // Check if we need to update the current part based on section labels
-    // (Simplified: assume sections appear in order as per exam config)
-    for (let s = 0; s < sectionLabels.length; s++) {
-      const label = sectionLabels[s].name;
-      const moduleMatch = label.match(/Module\s+([IV]+)/i);
-      if (moduleMatch) {
-        const romanToNum: Record<string, number> = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4 };
-        const moduleIdx = romanToNum[moduleMatch[1].toUpperCase()];
-        if (moduleIdx !== undefined && moduleIdx < examConfig.subjects.length) {
-          detectedModuleIndex = moduleIdx;
-        }
-      }
-    }
-    
-    // If first question in a new section, update part
-    if (detectedModuleIndex >= 0 && detectedModuleIndex < examConfig.subjects.length) {
-      currentSubject = examConfig.subjects[detectedModuleIndex];
-      currentPart = currentSubject.part;
-    }
+    // Get subject for this question based on its position
+    const qPos = questionPanelPositions[i - 1] || 0;
+    const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
     
     // Extract question number (Q.1, Q.2, etc.)
     const qNumMatch = panelContent.match(/Q\.(\d+)/i);
     const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
     
-    // Extract question image - look for first image in the panel that's not a tick/cross
-    const allImgMatches = [...panelContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
+    // Extract question content - look for text in the question row
+    // The question text is in a <td class="bold" valign="top"> after the Q.X cell
+    let questionText = '';
     let questionImageUrl = '';
     
-    // First image after Q.X is typically the question image
-    for (const match of allImgMatches) {
-      const src = match[1];
-      if (!src.includes('tick') && !src.includes('cross')) {
-        questionImageUrl = resolveUrl(src);
-        break;
+    // Try to find question text from the bold td after Q.X
+    const questionTextMatch = panelContent.match(
+      /Q\.\d+<\/td>\s*<td[^>]*class\s*=\s*["']bold["'][^>]*(?:style\s*=\s*["'][^"']*["'])?[^>]*>([\s\S]*?)(?=<\/td>)/i
+    );
+    if (questionTextMatch) {
+      const rawContent = questionTextMatch[1];
+      // Check if content has meaningful text (not just images)
+      const textContent = stripHtml(rawContent);
+      
+      // Extract images from the question area
+      const qImgMatches = [...rawContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
+      for (const match of qImgMatches) {
+        const src = match[1];
+        if (!src.includes('tick') && !src.includes('cross')) {
+          questionImageUrl = resolveUrl(src);
+          break;
+        }
+      }
+      
+      if (textContent.length > 3) {
+        questionText = textContent;
+      }
+    }
+    
+    // If no question text found yet, try extracting from general panel content
+    if (!questionText && !questionImageUrl) {
+      const allImgMatches = [...panelContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
+      for (const match of allImgMatches) {
+        const src = match[1];
+        if (!src.includes('tick') && !src.includes('cross')) {
+          questionImageUrl = resolveUrl(src);
+          break;
+        }
       }
     }
     
@@ -609,7 +693,6 @@ function parseAnswerKeyFormat(
     const optionIds = ['A', 'B', 'C', 'D'];
     
     // Find answer options - they have rightAns or wrngAns class
-    // Pattern: <td class="rightAns" or <td class="wrngAns"
     const answerRowRegex = /<td[^>]*class\s*=\s*["'](rightAns|wrngAns)["'][^>]*>([\s\S]*?)(?=<\/td>)/gi;
     let answerMatch;
     let optIdx = 0;
@@ -623,6 +706,8 @@ function parseAnswerKeyFormat(
       
       // Extract option image
       let optionImageUrl = '';
+      let optionText = '';
+      
       const optImgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
       let optImgMatch;
       while ((optImgMatch = optImgRegex.exec(rowContent)) !== null) {
@@ -633,6 +718,14 @@ function parseAnswerKeyFormat(
         }
       }
       
+      // Extract text content from option (strip images and clean up)
+      const textOnly = stripHtml(rowContent);
+      // Remove leading option number like "1. " or "2. "
+      const cleanedText = textOnly.replace(/^\d+\.\s*/, '').trim();
+      if (cleanedText.length > 0) {
+        optionText = cleanedText;
+      }
+      
       const optionLangUrls = getLanguageUrlsFromImage(optionImageUrl);
       
       options.push({
@@ -640,6 +733,7 @@ function parseAnswerKeyFormat(
         imageUrl: optionImageUrl,
         imageUrlHindi: optionLangUrls.hindi || optionImageUrl,
         imageUrlEnglish: optionLangUrls.english || optionImageUrl,
+        text: optionText || undefined,
         isSelected: hasTickMark,
         isCorrect: isCorrectAnswer,
       });
@@ -660,12 +754,10 @@ function parseAnswerKeyFormat(
     let hasSelected = options.some(o => o.isSelected);
     
     if (isBonus) {
-      // Bonus question - all candidates get full marks
       status = 'bonus';
     } else if (chosenOption === '--' || chosenOption === '' || chosenOption.includes('--')) {
       status = 'unattempted';
     } else {
-      // Parse chosen option number
       const chosenNum = parseInt(chosenOption);
       if (!isNaN(chosenNum) && chosenNum >= 1 && chosenNum <= 4) {
         const chosenIdx = chosenNum - 1;
@@ -680,7 +772,7 @@ function parseAnswerKeyFormat(
       }
     }
     
-    // Calculate marks - bonus questions get full marks
+    // Calculate marks
     const marksAwarded = status === 'bonus'
       ? currentSubject.correctMarks
       : status === 'correct'
@@ -696,6 +788,7 @@ function parseAnswerKeyFormat(
         imageUrl: '',
         imageUrlHindi: '',
         imageUrlEnglish: '',
+        text: undefined,
         isSelected: false,
         isCorrect: false,
       });
@@ -708,16 +801,17 @@ function parseAnswerKeyFormat(
       questionImageUrl,
       questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
       questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
+      questionText: questionText || undefined,
       options,
       status,
       marksAwarded,
       isBonus,
     });
     
-    console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Chosen: ${chosenOption}, Status: ${status}, Marks: ${marksAwarded}, Bonus: ${isBonus}`);
+    console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Subject: ${currentSubject.name}, Chosen: ${chosenOption}, Status: ${status}, HasText: ${!!questionText}`);
   }
   
-  // Extract candidate info if available
+  // Extract candidate info
   const candidate: CandidateInfo = {
     rollNumber: extractValue(html, 'Roll No') || extractValue(html, 'Roll Number') || '',
     name: extractValue(html, 'Candidate Name') || extractValue(html, 'Name') || '',
