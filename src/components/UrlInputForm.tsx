@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { EXAM_LIST, type ExamType, type Language } from '@/lib/examConfig';
+import { EXAM_CATEGORIES, getExamsByCategory, type ExamType, type ExamCategory, type Language } from '@/lib/examConfig';
 
 interface UrlInputFormProps {
   onAnalyze: (url: string, examType: ExamType, language: Language) => void;
@@ -21,6 +21,7 @@ export const UrlInputForm = ({
   isLoading
 }: UrlInputFormProps) => {
   const [url, setUrl] = useState('');
+  const [category, setCategory] = useState<ExamCategory | ''>('');
   const [examType, setExamType] = useState<ExamType | ''>('');
   const [language, setLanguage] = useState<Language | ''>('');
 
@@ -31,6 +32,12 @@ export const UrlInputForm = ({
     }
   };
 
+  const handleCategoryChange = (value: string) => {
+    setCategory(value as ExamCategory);
+    setExamType(''); // Reset exam when category changes
+  };
+
+  const categoryExams = category ? getExamsByCategory(category) : [];
   const isFormValid = url.trim() && examType && language;
 
   const features = [{
@@ -50,44 +57,65 @@ export const UrlInputForm = ({
   return (
     <div className="w-full max-w-3xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-4 mb-8">
-        {/* Exam Type & Language Selection */}
+        {/* Category & Exam Selection */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Select value={examType} onValueChange={(value) => setExamType(value as ExamType)}>
+          <Select value={category} onValueChange={handleCategoryChange}>
             <SelectTrigger className="h-12 bg-card border-border/60">
-              <SelectValue placeholder="Select Exam Type" />
+              <SelectValue placeholder="Select Category" />
             </SelectTrigger>
             <SelectContent>
-              {EXAM_LIST.map((exam) => (
-                <SelectItem key={exam.id} value={exam.id}>
+              {EXAM_CATEGORIES.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id}>
                   <span className="flex items-center gap-2">
-                    <span>{exam.emoji}</span>
-                    <span className="truncate">{exam.name}</span>
+                    <span>{cat.emoji}</span>
+                    <span className="truncate">{cat.name}</span>
                   </span>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+          <Select 
+            value={examType} 
+            onValueChange={(value) => setExamType(value as ExamType)}
+            disabled={!category}
+          >
             <SelectTrigger className="h-12 bg-card border-border/60">
-              <SelectValue placeholder="Select Language" />
+              <SelectValue placeholder={category ? "Select Exam" : "Select category first"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="hindi">
-                <span className="flex items-center gap-2">
-                  <span>🇮🇳</span>
-                  <span>Hindi / हिंदी</span>
-                </span>
-              </SelectItem>
-              <SelectItem value="english">
-                <span className="flex items-center gap-2">
-                  <span>🇬🇧</span>
-                  <span>English</span>
-                </span>
-              </SelectItem>
+              {categoryExams.map((exam) => (
+                <SelectItem key={exam.id} value={exam.id}>
+                  <span className="flex items-center gap-2">
+                    <span>{exam.emoji}</span>
+                    <span className="truncate">{exam.displayName}</span>
+                  </span>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
+
+        {/* Language Selection */}
+        <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
+          <SelectTrigger className="h-12 bg-card border-border/60">
+            <SelectValue placeholder="Select Language" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="hindi">
+              <span className="flex items-center gap-2">
+                <span>🇮🇳</span>
+                <span>Hindi / हिंदी</span>
+              </span>
+            </SelectItem>
+            <SelectItem value="english">
+              <span className="flex items-center gap-2">
+                <span>🇬🇧</span>
+                <span>English</span>
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* URL Input */}
         <div className="flex flex-col sm:flex-row gap-3">

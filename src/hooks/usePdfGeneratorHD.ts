@@ -38,6 +38,27 @@ export const usePdfGeneratorHD = () => {
     }
   };
 
+  // Helper to wrap long text into lines
+  const wrapText = (pdf: jsPDF, text: string, maxWidth: number, fontSize: number): string[] => {
+    pdf.setFontSize(fontSize);
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const testWidth = pdf.getTextWidth(testLine);
+      if (testWidth > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+    return lines;
+  };
+
   const generatePdf = useCallback(async (
     result: AnalysisResult, 
     downloadLanguage: DownloadLanguage = 'hindi'
@@ -58,13 +79,11 @@ export const usePdfGeneratorHD = () => {
       const contentWidth = pageWidth - 2 * margin;
       let yPos = margin;
 
-      // Helper function to add new page
       const addNewPage = () => {
         pdf.addPage();
         yPos = margin;
       };
 
-      // Check if new page needed
       const checkNewPage = (requiredSpace: number) => {
         if (yPos + requiredSpace > pageHeight - margin) {
           addNewPage();
@@ -101,7 +120,7 @@ export const usePdfGeneratorHD = () => {
       };
 
       // ============ HEADER ============
-      const examName = result.examConfig?.name || 'SSC Exam';
+      const examName = result.examConfig?.name || 'Exam';
       const langLabel = downloadLanguage === 'bilingual' ? 'Bilingual' : 
                         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
 
@@ -115,9 +134,67 @@ export const usePdfGeneratorHD = () => {
       
       pdf.setFontSize(11);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(`📋 Answer Key • ${langLabel}`, pageWidth / 2, 25, { align: 'center' });
+      pdf.text(`Answer Key - ${langLabel}`, pageWidth / 2, 25, { align: 'center' });
       
-      yPos = 45;
+      yPos = 42;
+
+      // ============ SCORECARD ============
+      pdf.setFillColor(241, 245, 249);
+      pdf.roundedRect(margin, yPos, contentWidth, 30, 3, 3, 'F');
+      pdf.setDrawColor(203, 213, 225);
+      pdf.roundedRect(margin, yPos, contentWidth, 30, 3, 3, 'S');
+
+      // Candidate info
+      pdf.setTextColor(30, 41, 59);
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'bold');
+      const candidateName = result.candidate.name || 'Candidate';
+      pdf.text(candidateName, margin + 6, yPos + 8);
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(100, 116, 139);
+      if (result.candidate.rollNumber) {
+        pdf.text(`Roll: ${result.candidate.rollNumber}`, margin + 6, yPos + 14);
+      }
+      if (result.candidate.testDate) {
+        pdf.text(`Date: ${result.candidate.testDate}`, margin + 6, yPos + 19);
+      }
+
+      // Score box on right
+      const scoreBoxX = margin + contentWidth - 55;
+      pdf.setFillColor(59, 130, 246);
+      pdf.roundedRect(scoreBoxX, yPos + 3, 50, 24, 2, 2, 'F');
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`${result.totalScore.toFixed(1)}`, scoreBoxX + 25, yPos + 14, { align: 'center' });
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`out of ${result.maxScore}`, scoreBoxX + 25, yPos + 21, { align: 'center' });
+
+      // Stats row
+      const statsY = yPos + 24;
+      const statsItems = [
+        { label: 'Correct', value: result.correctCount, color: [34, 197, 94] as [number, number, number] },
+        { label: 'Wrong', value: result.wrongCount, color: [239, 68, 68] as [number, number, number] },
+        { label: 'Skipped', value: result.unattemptedCount, color: [148, 163, 184] as [number, number, number] },
+      ];
+      if (result.bonusCount > 0) {
+        statsItems.push({ label: 'Bonus', value: result.bonusCount, color: [168, 85, 247] as [number, number, number] });
+      }
+      
+      const statSpacing = (scoreBoxX - margin - 10) / statsItems.length;
+      statsItems.forEach((item, idx) => {
+        const x = margin + 6 + idx * statSpacing;
+        pdf.setFillColor(item.color[0], item.color[1], item.color[2]);
+        pdf.circle(x, statsY + 1.5, 1.5, 'F');
+        pdf.setTextColor(71, 85, 105);
+        pdf.setFontSize(7);
+        pdf.text(`${item.label}: ${item.value}`, x + 4, statsY + 2.5);
+      });
+
+      yPos += 36;
 
       // ============ QUESTIONS BY SECTION ============
       const sections = result.examConfig?.subjects || [];
@@ -150,17 +227,51 @@ export const usePdfGeneratorHD = () => {
         for (const question of partQuestions) {
           globalQuestionNumber++;
           
-          // Estimate space needed (minimum)
           checkNewPage(60);
 
-          // Question number
+          // Question number badge
           pdf.setFillColor(59, 130, 246);
           pdf.roundedRect(margin, yPos, 18, 8, 2, 2, 'F');
           pdf.setTextColor(255, 255, 255);
           pdf.setFontSize(11);
           pdf.setFont('helvetica', 'bold');
           pdf.text(`Q.${globalQuestionNumber}`, margin + 9, yPos + 5.5, { align: 'center' });
+
+          // Status badge
+          const statusColors: Record<string, [number, number, number]> = {
+            correct: [34, 197, 94],
+            wrong: [239, 68, 68],
+            unattempted: [148, 163, 184],
+            bonus: [168, 85, 247],
+          };
+          const statusColor = statusColors[question.status] || [148, 163, 184];
+          const statusLabel = question.status === 'correct' ? `+${question.marksAwarded.toFixed(1)}` :
+                             question.status === 'wrong' ? `${question.marksAwarded.toFixed(1)}` :
+                             question.status === 'bonus' ? `+${question.marksAwarded.toFixed(1)} Bonus` : '0.0';
+          
+          pdf.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
+          const statusWidth = pdf.getTextWidth(statusLabel) + 6;
+          pdf.roundedRect(margin + 20, yPos, Math.max(statusWidth, 16), 8, 2, 2, 'F');
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFontSize(8);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(statusLabel, margin + 20 + Math.max(statusWidth, 16) / 2, yPos + 5.5, { align: 'center' });
+          
           yPos += 12;
+
+          // Question text (if available)
+          if (question.questionText) {
+            pdf.setTextColor(30, 41, 59);
+            pdf.setFontSize(9);
+            pdf.setFont('helvetica', 'normal');
+            const textLines = wrapText(pdf, question.questionText, contentWidth - 4, 9);
+            for (const line of textLines) {
+              checkNewPage(6);
+              pdf.text(line, margin + 2, yPos + 4);
+              yPos += 5;
+            }
+            yPos += 2;
+          }
 
           // Question image(s)
           const questionImgUrls = getQuestionImageUrl(question);
@@ -189,16 +300,14 @@ export const usePdfGeneratorHD = () => {
               }
             }
           } else if ('hindi' in questionImgUrls || 'english' in questionImgUrls) {
-            // Bilingual - show both
             const hindiUrl = 'hindi' in questionImgUrls ? questionImgUrls.hindi : null;
             const englishUrl = 'english' in questionImgUrls ? questionImgUrls.english : null;
             
-            for (const [lang, url] of [['हिंदी', hindiUrl], ['English', englishUrl]] as const) {
+            for (const [lang, url] of [['Hindi', hindiUrl], ['English', englishUrl]] as const) {
               if (!url) continue;
               
               checkNewPage(45);
               
-              // Language label
               pdf.setFillColor(59, 130, 246);
               pdf.roundedRect(margin, yPos, 20, 6, 1, 1, 'F');
               pdf.setTextColor(255, 255, 255);
@@ -233,76 +342,92 @@ export const usePdfGeneratorHD = () => {
           // Options
           yPos += 2;
           for (const option of question.options) {
-            checkNewPage(14);
+            const hasText = option.text && option.text.trim() !== '';
+            const optionHeight = hasText ? 11 : 11;
+            checkNewPage(optionHeight + 2);
             
             const isCorrect = option.isCorrect;
+            const isSelected = option.isSelected;
             
             // Option background
             if (isCorrect) {
               pdf.setFillColor(220, 252, 231);
               pdf.setDrawColor(34, 197, 94);
+            } else if (isSelected && !isCorrect) {
+              pdf.setFillColor(254, 226, 226);
+              pdf.setDrawColor(239, 68, 68);
             } else {
               pdf.setFillColor(248, 250, 252);
               pdf.setDrawColor(229, 231, 235);
             }
-            pdf.roundedRect(margin, yPos, contentWidth, 11, 2, 2, 'FD');
+            pdf.roundedRect(margin, yPos, contentWidth, optionHeight, 2, 2, 'FD');
             
-            // Option label
+            // Option label circle
             if (isCorrect) {
               pdf.setFillColor(34, 197, 94);
+            } else if (isSelected) {
+              pdf.setFillColor(239, 68, 68);
             } else {
               pdf.setFillColor(226, 232, 240);
             }
             pdf.roundedRect(margin + 3, yPos + 2, 7, 7, 3.5, 3.5, 'F');
             
-            pdf.setTextColor(isCorrect ? 255 : 71, isCorrect ? 255 : 85, isCorrect ? 255 : 105);
+            pdf.setTextColor(isCorrect || isSelected ? 255 : 71, isCorrect || isSelected ? 255 : 85, isCorrect || isSelected ? 255 : 105);
             pdf.setFontSize(9);
             pdf.setFont('helvetica', 'bold');
             pdf.text(option.id, margin + 6.5, yPos + 7, { align: 'center' });
 
-            // Option image
-            const optionImgUrls = getOptionImageUrl(option);
-            
-            if ('single' in optionImgUrls && optionImgUrls.single) {
-              const optImgData = await loadImage(optionImgUrls.single);
-              if (optImgData) {
-                try {
-                  const optMaxHeight = 8;
-                  let optImgWidth = (optImgData.width / optImgData.height) * optMaxHeight;
-                  if (optImgWidth > contentWidth - 20) {
-                    optImgWidth = contentWidth - 20;
-                  }
-                  pdf.addImage(optImgData.data, 'JPEG', margin + 13, yPos + 1.5, optImgWidth, optMaxHeight);
-                } catch {
-                  // Skip if image fails
-                }
-              }
-            } else if ('hindi' in optionImgUrls || 'english' in optionImgUrls) {
-              // Bilingual options
-              let xOffset = margin + 13;
-              for (const url of [optionImgUrls.hindi, optionImgUrls.english] as const) {
-                if (!url) continue;
-                const optImgData = await loadImage(url);
+            // Option text content
+            if (hasText) {
+              pdf.setTextColor(30, 41, 59);
+              pdf.setFontSize(8);
+              pdf.setFont('helvetica', 'normal');
+              const optText = option.text!.substring(0, 120);
+              pdf.text(optText, margin + 13, yPos + 7);
+            } else {
+              // Option image
+              const optionImgUrls = getOptionImageUrl(option);
+              
+              if ('single' in optionImgUrls && optionImgUrls.single) {
+                const optImgData = await loadImage(optionImgUrls.single);
                 if (optImgData) {
                   try {
                     const optMaxHeight = 8;
                     let optImgWidth = (optImgData.width / optImgData.height) * optMaxHeight;
-                    if (optImgWidth > (contentWidth - 20) / 2) {
-                      optImgWidth = (contentWidth - 20) / 2;
+                    if (optImgWidth > contentWidth - 20) {
+                      optImgWidth = contentWidth - 20;
                     }
-                    pdf.addImage(optImgData.data, 'JPEG', xOffset, yPos + 1.5, optImgWidth, optMaxHeight);
-                    xOffset += optImgWidth + 5;
+                    pdf.addImage(optImgData.data, 'JPEG', margin + 13, yPos + 1.5, optImgWidth, optMaxHeight);
                   } catch {
                     // Skip if image fails
+                  }
+                }
+              } else if ('hindi' in optionImgUrls || 'english' in optionImgUrls) {
+                let xOffset = margin + 13;
+                for (const url of [optionImgUrls.hindi, optionImgUrls.english] as const) {
+                  if (!url) continue;
+                  const optImgData = await loadImage(url);
+                  if (optImgData) {
+                    try {
+                      const optMaxHeight = 8;
+                      let optImgWidth = (optImgData.width / optImgData.height) * optMaxHeight;
+                      if (optImgWidth > (contentWidth - 20) / 2) {
+                        optImgWidth = (contentWidth - 20) / 2;
+                      }
+                      pdf.addImage(optImgData.data, 'JPEG', xOffset, yPos + 1.5, optImgWidth, optMaxHeight);
+                      xOffset += optImgWidth + 5;
+                    } catch {
+                      // Skip if image fails
+                    }
                   }
                 }
               }
             }
             
-            yPos += 13;
+            yPos += optionHeight + 2;
           }
 
-          yPos += 8; // Space between questions
+          yPos += 6;
           
           processedCount++;
           setProgress(Math.round((processedCount / totalQuestions) * 100));
