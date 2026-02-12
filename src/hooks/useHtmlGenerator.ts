@@ -78,20 +78,28 @@ export const useHtmlGenerator = () => {
             const optionImg = getOptionImageUrl(option);
             const hasOptionText = option.text && option.text.trim() !== '';
             
-            // Build option content HTML based on text or image
+            // Build option content HTML - show both image and text when both are present
             let optionContentHtml = '';
-            if (hasOptionText) {
-              optionContentHtml = `<span class="option-text-content">${option.text}</span>`;
-            } else if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg) {
-              optionContentHtml = `
+            let hasOptionImage = false;
+            
+            if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg && (optionImg.hindi || optionImg.english)) {
+              hasOptionImage = true;
+              optionContentHtml += `
                 <div class="option-images bilingual">
                   ${optionImg.hindi ? `<img src="${optionImg.hindi}" alt="Option ${option.id} (Hindi)" class="option-image" loading="lazy" />` : ''}
                   ${optionImg.english ? `<img src="${optionImg.english}" alt="Option ${option.id} (English)" class="option-image" loading="lazy" />` : ''}
                 </div>
               `;
             } else if ('single' in optionImg && optionImg.single) {
-              optionContentHtml = `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
-            } else {
+              hasOptionImage = true;
+              optionContentHtml += `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
+            }
+            
+            if (hasOptionText) {
+              optionContentHtml += `<span class="option-text-content">${option.text}</span>`;
+            }
+            
+            if (!hasOptionImage && !hasOptionText) {
               optionContentHtml = `<span class="option-text">Option ${option.id}</span>`;
             }
             

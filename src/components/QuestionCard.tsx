@@ -160,19 +160,24 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getOptionLabelClass(option)}`}>
                 {option.id}
               </span>
-              {hasOptionText ? (
-                <span className="text-foreground text-sm">{option.text}</span>
-              ) : hasOptionImage ? (
-                <img 
-                  src={optionImageUrl}
-                  alt={`Option ${option.id}`}
-                  className="max-h-10 h-auto"
-                  loading="lazy"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
+              {hasOptionText || hasOptionImage ? (
+                <div className="flex items-center gap-2">
+                  {hasOptionImage && (
+                    <img 
+                      src={optionImageUrl}
+                      alt={`Option ${option.id}`}
+                      className="max-h-10 h-auto"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  {hasOptionText && (
+                    <span className="text-foreground text-sm">{option.text}</span>
+                  )}
+                </div>
               ) : (
                 <span className="text-muted-foreground text-sm">Option {option.id}</span>
               )}
