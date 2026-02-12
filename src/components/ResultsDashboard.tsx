@@ -25,8 +25,8 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
     try {
       await generateHtml(result, 'normal', language);
       toast({
-        title: "Download Started",
-        description: "Your HTML file is being downloaded.",
+        title: "Download Complete",
+        description: "Your HTML file has been downloaded successfully.",
       });
     } catch (error) {
       console.error('Download error:', error);
