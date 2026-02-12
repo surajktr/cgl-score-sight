@@ -61,33 +61,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => window.print()}
-                className="gap-2"
-              >
-                <Printer className="h-4 w-4" />
-                <span className="hidden sm:inline">Print</span>
-              </Button>
-              <Button 
-                size="sm" 
-                onClick={handleDownloadPdf}
-                disabled={isGenerating}
-                className="gap-2"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="hidden sm:inline">{progress}%</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    <span className="hidden sm:inline">Download PDF</span>
-                  </>
-                )}
-              </Button>
+              {/* Buttons removed as per user request */}
             </div>
           </div>
           
