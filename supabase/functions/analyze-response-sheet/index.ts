@@ -686,12 +686,22 @@ function parseAnswerKeyFormat(
   const questions: QuestionData[] = [];
   
   // Helper to resolve relative URLs
+  // baseUrl here is the directory path of the HTML file (e.g., https://host/path/to/dir/)
   const resolveUrl = (src: string): string => {
     if (!src) return '';
     if (src.startsWith('http://') || src.startsWith('https://')) return src;
     if (src.startsWith('//')) return 'https:' + src;
-    if (src.startsWith('/')) return baseUrl + src;
-    return baseUrl + '/' + src;
+    if (src.startsWith('/')) {
+      // Absolute path from origin - extract origin from baseUrl
+      try {
+        const origin = new URL(baseUrl).origin;
+        return origin + src;
+      } catch {
+        return baseUrl + src;
+      }
+    }
+    // Relative path - resolve against the directory of the HTML file
+    return baseUrl + src;
   };
 
   // Find all section labels with their positions in the HTML
@@ -1061,9 +1071,11 @@ serve(async (req) => {
     if (isAnswerKeyUrl) {
       console.log('Detected Answer Key URL format - AssessmentQPHTMLMode1');
       
-      // Extract base URL for resolving relative image paths
-      const urlObj = new URL(url);
-      const baseUrl = urlObj.origin;
+      // Extract base directory path for resolving relative image paths
+      // Get the directory path of the HTML file for resolving relative URLs
+      const urlPath = url.split('?')[0];
+      const lastSlashIdx = urlPath.lastIndexOf('/');
+      const baseDir = urlPath.substring(0, lastSlashIdx + 1);
       
       let html = providedHtml;
       
@@ -1117,7 +1129,7 @@ serve(async (req) => {
       }
       
       // Parse the AssessmentQPHTMLMode1 format
-      const parsedData = parseAnswerKeyFormat(html, baseUrl, examConfig);
+      const parsedData = parseAnswerKeyFormat(html, baseDir, examConfig);
       
       if (parsedData.questions.length === 0) {
         console.log('No questions found. HTML sample:', html.substring(0, 3000));
