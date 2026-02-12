@@ -8,7 +8,7 @@ export const useHtmlGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generateHtml = useCallback(async (
-    result: AnalysisResult,
+    result: AnalysisResult, 
     mode: HtmlMode = 'normal',
     downloadLanguage: DownloadLanguage = 'hindi'
   ) => {
@@ -17,9 +17,9 @@ export const useHtmlGenerator = () => {
     try {
       const examName = result.examConfig?.name || 'SSC Exam';
       const sections = result.examConfig?.subjects || [];
-      const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' :
-        downloadLanguage === 'hindi' ? 'Hindi' : 'English';
-
+      const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                           downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      
       // Helper function to get correct image URL based on language preference
       const getQuestionImageUrl = (question: typeof result.questions[0]) => {
         if (downloadLanguage === 'bilingual') {
@@ -45,18 +45,18 @@ export const useHtmlGenerator = () => {
           return { single: option.imageUrlEnglish || option.imageUrl, bilingual: false };
         }
       };
-
+      
       // Group questions by part and calculate continuous numbering
       let questionsHtml = '';
       let globalQuestionNumber = 0;
-
+      
       for (const section of sections) {
         const partQuestions = result.questions.filter(q => q.part === section.part);
         if (partQuestions.length === 0) continue;
-
+        
         const startNumber = globalQuestionNumber + 1;
         const endNumber = globalQuestionNumber + partQuestions.length;
-
+        
         questionsHtml += `
           <div class="part-section">
             <div class="part-header">
@@ -66,18 +66,18 @@ export const useHtmlGenerator = () => {
             </div>
             <div class="questions-list">
         `;
-
+        
         for (const question of partQuestions) {
           globalQuestionNumber++;
-
+          
           const questionImg = getQuestionImageUrl(question);
-
+          
           let optionsHtml = '';
           for (const option of question.options) {
             const isCorrectAnswer = option.isCorrect;
             const optionImg = getOptionImageUrl(option);
             const hasOptionText = option.text && option.text.trim() !== '';
-
+            
             // Build option content HTML based on text or image
             let optionContentHtml = '';
             if (hasOptionText) {
@@ -94,13 +94,13 @@ export const useHtmlGenerator = () => {
             } else {
               optionContentHtml = `<span class="option-text">Option ${option.id}</span>`;
             }
-
+            
             // In normal mode: show correct answer highlighted
             // In quiz mode: hide answer, reveal on click
             if (mode === 'normal') {
               const optionClass = isCorrectAnswer ? 'option-correct' : '';
               const labelClass = isCorrectAnswer ? 'label-correct' : 'label-default';
-
+              
               optionsHtml += `
                 <div class="option ${optionClass}">
                   <span class="option-label ${labelClass}">${option.id}</span>
@@ -116,15 +116,15 @@ export const useHtmlGenerator = () => {
               `;
             }
           }
-
+          
           // Build question content HTML
           let questionContentHtml = '';
           const hasQuestionText = question.questionText && question.questionText.trim() !== '';
-
+          
           if (hasQuestionText) {
             questionContentHtml += `<p class="question-text-content">${question.questionText}</p>`;
           }
-
+          
           if (questionImg.bilingual && 'hindi' in questionImg && 'english' in questionImg) {
             questionContentHtml += `
               <div class="question-images bilingual">
@@ -135,25 +135,23 @@ export const useHtmlGenerator = () => {
           } else if ('single' in questionImg && questionImg.single) {
             questionContentHtml += `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
           }
-
+          
           questionsHtml += `
             <div class="question">
               <div class="question-header">
                 <span class="question-number">Q.${globalQuestionNumber}</span>
               </div>
-              <div class="question-body">
-                <div class="question-content-container">
-                  ${questionContentHtml}
-                </div>
-                <div class="options">
-                  ${optionsHtml}
-                </div>
+              <div class="question-content-container">
+                ${questionContentHtml}
+              </div>
+              <div class="options">
+                ${optionsHtml}
               </div>
               ${mode === 'quiz' ? `<button class="show-answer-btn" onclick="showAnswer(this)">Show Answer</button>` : ''}
             </div>
           `;
         }
-
+        
         questionsHtml += `
             </div>
           </div>
@@ -233,7 +231,7 @@ export const useHtmlGenerator = () => {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: #ffffff;
       color: #1e293b;
-      line-height: 1.5;
+      line-height: 1.6;
     }
     
     .container {
@@ -274,31 +272,31 @@ export const useHtmlGenerator = () => {
     .part-header {
       background: linear-gradient(135deg, #1e40af, #3b82f6);
       color: white;
-      padding: 10px 16px;
-      border-radius: 8px;
+      padding: 14px 20px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
       flex-wrap: wrap;
     }
     
     .part-badge {
       background: rgba(255,255,255,0.2);
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 13px;
       font-weight: 700;
     }
     
     .part-title {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 600;
       flex: 1;
     }
     
     .part-range {
-      font-size: 11px;
+      font-size: 12px;
       opacity: 0.9;
     }
     
@@ -307,9 +305,8 @@ export const useHtmlGenerator = () => {
     }
     
     .question {
-      padding: 16px 0;
+      padding: 20px 0;
       border-bottom: 1px solid #e5e7eb;
-      page-break-inside: avoid;
     }
     
     .question:last-child {
@@ -317,40 +314,39 @@ export const useHtmlGenerator = () => {
     }
     
     .question-header {
-      margin-bottom: 8px;
+      margin-bottom: 12px;
     }
     
     .question-number {
-      font-size: 14px;
+      font-size: 15px;
       font-weight: 700;
       color: #3b82f6;
     }
     
     .question-image-container {
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
     
     .question-image {
       max-width: 100%;
       height: auto;
       border-radius: 6px;
-      max-height: 800px; /* Increased from 300px for better readability of passages */
     }
     
     .options {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
     
     .option {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 8px 12px;
-      border-radius: 6px;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
       background: #f8fafc;
-      border: 1px solid transparent;
+      border: 2px solid transparent;
       transition: all 0.2s ease;
     }
     
@@ -364,26 +360,25 @@ export const useHtmlGenerator = () => {
     }
     
     .option-correct {
-      background: rgba(34, 197, 94, 0.1) !important;
-      border-color: rgba(34, 197, 94, 0.3) !important;
+      background: rgba(34, 197, 94, 0.15) !important;
+      border-color: #22c55e !important;
     }
     
     .option-wrong {
-      background: rgba(239, 68, 68, 0.1) !important;
-      border-color: rgba(239, 68, 68, 0.3) !important;
+      background: rgba(239, 68, 68, 0.15) !important;
+      border-color: #ef4444 !important;
     }
     
     .option-label {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 700;
       flex-shrink: 0;
-      margin-top: 1px;
     }
     
     .label-default {
@@ -402,221 +397,112 @@ export const useHtmlGenerator = () => {
     }
     
     .option-image {
-      max-height: 60px;
+      max-height: 50px;
       height: auto;
     }
     
-    .option-text-content {
-      font-size: 13px;
-      color: #334155;
-      line-height: 1.4;
-      margin-top: 2px;
+    .option-text {
+      font-size: 14px;
+      color: #64748b;
     }
     
-    .question-text-content {
+    .option-text-content {
       font-size: 14px;
       color: #1e293b;
       line-height: 1.5;
-      margin-bottom: 10px;
     }
     
-    .question-content-container {
+    .question-text-content {
+      font-size: 15px;
+      color: #1e293b;
+      line-height: 1.6;
       margin-bottom: 12px;
     }
     
+    .question-content-container {
+      margin-bottom: 16px;
+    }
+    
     .show-answer-btn {
-      margin-top: 10px;
-      padding: 6px 12px;
+      margin-top: 12px;
+      padding: 8px 16px;
       background: #3b82f6;
       color: white;
       border: none;
-      border-radius: 4px;
-      font-size: 12px;
+      border-radius: 6px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .show-answer-btn:hover {
+      background: #2563eb;
     }
     
     .footer {
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       color: #94a3b8;
       font-size: 11px;
       border-top: 1px solid #e5e7eb;
       margin-top: 20px;
     }
     
-    /* Print Optimizations */
+    /* Bilingual styles */
+    .question-images.bilingual {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .lang-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+    
+    .lang-label {
+      display: inline-block;
+      background: #3b82f6;
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    
+    .option-images.bilingual {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .option-images.bilingual .option-image {
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 2px;
+    }
+    
     @media print {
-      @page {
-        margin: 1cm;
-        size: A4;
-      }
-      body { 
-        background: white; 
-        font-size: 10pt;
-        color: #1e293b; 
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      .container { 
-        max-width: 100%; 
-        width: 100%; 
-        padding: 0; 
-      }
-      .header, .footer, .show-answer-btn { 
-        display: none !important; 
-      }
-      
-      .part-section { 
-        margin-bottom: 12px; 
-        /* Removed break-inside: avoid to allow continuous flow */
-      }
-      .part-header { 
-        padding: 4px 8px; 
-        margin-bottom: 6px; 
-        background: #f3f4f6 !important; 
-        color: #1e40af !important; 
-        border: 1px solid #ddd;
-        border-radius: 0 !important; 
-        page-break-after: avoid; /* Keep header with next content */
-        break-after: avoid;
-      }
-      .part-title { font-size: 11pt; }
-      
-      .question { 
-        padding: 8px 0; 
-        border-bottom: 1px solid #eee; 
-        page-break-inside: avoid; 
-        break-inside: avoid;
-        display: flex; /* Flex layout for alignment */
-        align-items: flex-start;
-        gap: 8px;
-      }
-      
-      /* Fixed width column for Q# */
-      .question-header { 
-        width: 35px; 
-        flex-shrink: 0;
-        margin-right: 0;
-      }
-      
-      .question-number { 
-        font-size: 10pt; 
-        color: #3b82f6 !important; 
-        font-weight: 700;
-        display: block;
-      }
-
-      /* Wrapper for content + options */
-      .question-body {
-        flex-grow: 1;
-        width: calc(100% - 43px);
-      }
-
-      .question-content-container { 
-        display: block; 
-        margin-bottom: 6px;
-      }
-
-      .question-text-content { 
-        display: block; 
-        font-size: 10pt; 
-        margin: 0 0 4px 0;
-        line-height: 1.4;
-      }
-      
-      /* Images */
-      .question-image-container, .question-images {
-        display: block;
-        margin-top: 8px;
-        margin-bottom: 8px;
-        page-break-inside: avoid;
-        border-radius: 0 !important; /* Remove rounded corners */
-      }
-      .question-image { 
-        max-height: 400px; 
-        max-width: 90%; 
-        height: auto;
-        border-radius: 0 !important; /* Remove rounded corners */
-      }
-
-      /* Options Layout */
-      .options { 
-        display: flex; 
-        flex-wrap: wrap; 
-        gap: 6px 12px;
-        margin-top: 4px;
-        padding-left: 10px;
-      }
-      
-      .option {
-        width: auto;
-        padding: 2px 6px;
-        background: white !important; /* White background */
-        border: none !important; /* No border */
-        border-radius: 0 !important; /* No rounded corners */
-        display: inline-flex;
-        align-items: flex-start;
-        gap: 6px;
-        min-width: unset;
-      }
-      
-      .option-label {
-        width: 20px;
-        height: 20px;
-        font-size: 9pt;
-        line-height: 18px;
-        border: 1px solid #cbd5e1;
-        color: #475569;
-        background: white;
-        margin-top: 1px;
-        border-radius: 0 !important; /* Square labels if preferred, or keep circle? User said "remove round corner" generally, but label circle is standard. I'll keep circle for label unless asked. */
-      }
-      
-      /* Correct/Wrong Highlights - minimal */
-      .label-correct {
-        border-color: #22c55e !important;
-        background: #22c55e !important;
-        color: white !important;
-      }
-      
-      .option-correct {
-         /* Just highlight text or label, no box background to keep it "white" */
-         /* But usually we need some indication. I'll make text green/bold */
-         background: white !important;
-      }
-
-      .option-wrong {
-         background: white !important;
-      }
-      
-      .option-text-content {
-        font-size: 10pt;
-        color: #334155;
-        margin-top: 0;
-      }
-      
-      .option-correct .option-text-content {
-        font-weight: 700;
-        color: #15803d !important; /* Green text */
-        text-decoration: underline;
-      }
-      
-      .option-wrong .option-text-content {
-        color: #b91c1c !important; /* Red text */
-      }
-      
-      .option-image { 
-          max-height: 80px; 
-          border-radius: 0 !important;
-      }
+      body { background: white; }
+      .container { max-width: 100%; padding: 10px; }
+      .question { page-break-inside: avoid; }
+      .show-answer-btn { display: none; }
     }
     
     @media (max-width: 640px) {
       .container { padding: 12px; }
       .header { padding: 16px; }
+      .header h1 { font-size: 18px; }
+      .part-header { padding: 12px 14px; }
+      .part-title { font-size: 13px; }
       .question { padding: 14px 0; }
-      .option { padding: 8px 10px; }
+      .option { padding: 8px 10px; gap: 8px; }
+      .option-image { max-height: 40px; }
+      .option-images.bilingual { flex-direction: column; }
     }
   </style>
 </head>
@@ -644,8 +530,8 @@ export const useHtmlGenerator = () => {
       const a = document.createElement('a');
       a.href = url;
       const modeLabel = mode === 'quiz' ? 'Quiz' : 'AnswerKey';
-      const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' :
-        downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
       a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${langSuffix}_${new Date().toISOString().split('T')[0]}.html`;
       document.body.appendChild(a);
       a.click();
