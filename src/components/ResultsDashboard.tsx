@@ -40,7 +40,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Header with Back button and Download HTML button */}
       <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur-sm">
         <div className="container max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
