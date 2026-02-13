@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AnalysisResult } from '@/lib/mockData';
-import type { ExamType, Language } from '@/lib/examConfig';
+import { type ExamType, type Language, getExamConfig } from '@/lib/examConfig';
+import { analyzeResponseSheetLocal } from '@/lib/localParser';
 
 interface AnalyzeResponse {
   success: boolean;
@@ -69,6 +70,22 @@ export async function analyzeResponseSheet(
   language: Language
 ): Promise<AnalyzeResponse> {
   try {
+    // FORCE LOCAL for RRB/NTPC and CGL MAINS to use new parsing logic (bypass old edge function)
+    if (examType.startsWith('RRB') || examType.startsWith('RAILWAY') || examType === 'RRB_NTPC_CBT1' || examType === 'RRB_NTPC_CBT2' || examType === 'SSC_CGL_MAINS') {
+      console.log('Local Parsing Required (RRB/CGL Mains): Forcing local analysis...');
+      const html = await fetchHtmlViaProxy(url);
+      if (html) {
+        try {
+          console.log('Got HTML, parsing locally...');
+          const examConfig = getExamConfig(examType);
+          const result = analyzeResponseSheetLocal(html, url, examConfig, language);
+          return { success: true, data: result };
+        } catch (e) {
+          console.error('Local parsing failed', e);
+        }
+      }
+    }
+
     // First, try calling the edge function without HTML (it will try server-side fetch)
     console.log('Attempting analysis via edge function...');
     const { data, error } = await supabase.functions.invoke('analyze-response-sheet', {
