@@ -9,10 +9,10 @@ export const CandidateInfoCard = ({ candidate }: CandidateInfoCardProps) => {
   const infoItems = [
     { icon: FileText, label: 'Roll Number', value: candidate.rollNumber },
     { icon: User, label: 'Candidate Name', value: candidate.name },
-    { icon: Award, label: 'Exam Name', value: candidate.examLevel },
-    { icon: Calendar, label: 'Exam Date', value: candidate.testDate },
-    { icon: Clock, label: 'Exam Time', value: candidate.shift },
-    { icon: MapPin, label: 'Venue Name', value: candidate.centreName },
+    { icon: Award, label: 'Exam Level', value: candidate.examLevel },
+    { icon: Calendar, label: 'Test Date', value: candidate.testDate },
+    { icon: Clock, label: 'Shift', value: candidate.shift },
+    { icon: MapPin, label: 'Centre', value: candidate.centreName },
   ];
 
   return (
@@ -21,7 +21,7 @@ export const CandidateInfoCard = ({ candidate }: CandidateInfoCardProps) => {
         <User className="h-5 w-5 text-primary" />
         Candidate Information
       </h2>
-
+      
       <div className="grid sm:grid-cols-2 gap-4">
         {infoItems.map((item) => (
           <div key={item.label} className="flex items-start gap-3">

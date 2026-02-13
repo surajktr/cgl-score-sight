@@ -8,7 +8,7 @@ export const useHtmlGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const generateHtml = useCallback(async (
-    result: AnalysisResult,
+    result: AnalysisResult, 
     mode: HtmlMode = 'normal',
     downloadLanguage: DownloadLanguage = 'hindi'
   ) => {
@@ -17,9 +17,9 @@ export const useHtmlGenerator = () => {
     try {
       const examName = result.examConfig?.name || 'SSC Exam';
       const sections = result.examConfig?.subjects || [];
-      const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' :
-        downloadLanguage === 'hindi' ? 'Hindi' : 'English';
-
+      const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                           downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      
       // Helper function to get correct image URL based on language preference
       const getQuestionImageUrl = (question: typeof result.questions[0]) => {
         if (downloadLanguage === 'bilingual') {
@@ -45,18 +45,18 @@ export const useHtmlGenerator = () => {
           return { single: option.imageUrlEnglish || option.imageUrl, bilingual: false };
         }
       };
-
+      
       // Group questions by part and calculate continuous numbering
       let questionsHtml = '';
       let globalQuestionNumber = 0;
-
+      
       for (const section of sections) {
         const partQuestions = result.questions.filter(q => q.part === section.part);
         if (partQuestions.length === 0) continue;
-
+        
         const startNumber = globalQuestionNumber + 1;
         const endNumber = globalQuestionNumber + partQuestions.length;
-
+        
         questionsHtml += `
           <div class="part-section">
             <div class="part-header">
@@ -66,49 +66,41 @@ export const useHtmlGenerator = () => {
             </div>
             <div class="questions-list">
         `;
-
+        
         for (const question of partQuestions) {
           globalQuestionNumber++;
-
+          
           const questionImg = getQuestionImageUrl(question);
-
+          
           let optionsHtml = '';
           for (const option of question.options) {
             const isCorrectAnswer = option.isCorrect;
             const optionImg = getOptionImageUrl(option);
             const hasOptionText = option.text && option.text.trim() !== '';
-
-            // Build option content HTML - show both image and text when both are present
+            
+            // Build option content HTML based on text or image
             let optionContentHtml = '';
-            let hasOptionImage = false;
-
-            if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg && (optionImg.hindi || optionImg.english)) {
-              hasOptionImage = true;
-              optionContentHtml += `
+            if (hasOptionText) {
+              optionContentHtml = `<span class="option-text-content">${option.text}</span>`;
+            } else if (optionImg.bilingual && 'hindi' in optionImg && 'english' in optionImg) {
+              optionContentHtml = `
                 <div class="option-images bilingual">
                   ${optionImg.hindi ? `<img src="${optionImg.hindi}" alt="Option ${option.id} (Hindi)" class="option-image" loading="lazy" />` : ''}
                   ${optionImg.english ? `<img src="${optionImg.english}" alt="Option ${option.id} (English)" class="option-image" loading="lazy" />` : ''}
                 </div>
               `;
             } else if ('single' in optionImg && optionImg.single) {
-              hasOptionImage = true;
-              optionContentHtml += `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
-            }
-
-            if (hasOptionText) {
-              optionContentHtml += `<span class="option-text-content">${option.text}</span>`;
-            }
-
-            if (!hasOptionImage && !hasOptionText) {
+              optionContentHtml = `<img src="${optionImg.single}" alt="Option ${option.id}" class="option-image" loading="lazy" />`;
+            } else {
               optionContentHtml = `<span class="option-text">Option ${option.id}</span>`;
             }
-
+            
             // In normal mode: show correct answer highlighted
             // In quiz mode: hide answer, reveal on click
             if (mode === 'normal') {
               const optionClass = isCorrectAnswer ? 'option-correct' : '';
               const labelClass = isCorrectAnswer ? 'label-correct' : 'label-default';
-
+              
               optionsHtml += `
                 <div class="option ${optionClass}">
                   <span class="option-label ${labelClass}">${option.id}</span>
@@ -124,15 +116,15 @@ export const useHtmlGenerator = () => {
               `;
             }
           }
-
+          
           // Build question content HTML
           let questionContentHtml = '';
           const hasQuestionText = question.questionText && question.questionText.trim() !== '';
-
+          
           if (hasQuestionText) {
             questionContentHtml += `<p class="question-text-content">${question.questionText}</p>`;
           }
-
+          
           if (questionImg.bilingual && 'hindi' in questionImg && 'english' in questionImg) {
             questionContentHtml += `
               <div class="question-images bilingual">
@@ -143,7 +135,7 @@ export const useHtmlGenerator = () => {
           } else if ('single' in questionImg && questionImg.single) {
             questionContentHtml += `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
           }
-
+          
           questionsHtml += `
             <div class="question">
               <div class="question-header">
@@ -159,7 +151,7 @@ export const useHtmlGenerator = () => {
             </div>
           `;
         }
-
+        
         questionsHtml += `
             </div>
           </div>
@@ -245,23 +237,22 @@ export const useHtmlGenerator = () => {
     .container {
       max-width: 900px;
       margin: 0 auto;
-      padding: 10px;
+      padding: 20px;
     }
     
     .header {
       background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       color: white;
-      padding: 8px 15px;
-      border-radius: 6px;
+      padding: 24px 30px;
+      border-radius: 12px;
       text-align: center;
-      margin-bottom: 8px;
-      page-break-after: avoid;
+      margin-bottom: 24px;
     }
     
     .header h1 {
-      font-size: 16px;
+      font-size: 22px;
       font-weight: 700;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
     }
     
     .header .mode-badge {
@@ -275,20 +266,19 @@ export const useHtmlGenerator = () => {
     }
     
     .part-section {
-      margin-bottom: 12px;
+      margin-bottom: 32px;
     }
     
     .part-header {
       background: linear-gradient(135deg, #1e40af, #3b82f6);
       color: white;
-      padding: 5px 12px;
-      border-radius: 5px;
+      padding: 14px 20px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
+      gap: 12px;
+      margin-bottom: 16px;
       flex-wrap: wrap;
-      page-break-after: avoid;
     }
     
     .part-badge {
@@ -315,9 +305,8 @@ export const useHtmlGenerator = () => {
     }
     
     .question {
-      padding: 6px 0;
+      padding: 20px 0;
       border-bottom: 1px solid #e5e7eb;
-      page-break-inside: avoid;
     }
     
     .question:last-child {
@@ -325,7 +314,7 @@ export const useHtmlGenerator = () => {
     }
     
     .question-header {
-      margin-bottom: 4px;
+      margin-bottom: 12px;
     }
     
     .question-number {
@@ -345,18 +334,17 @@ export const useHtmlGenerator = () => {
     }
     
     .options {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 5px;
-      margin-top: 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
     
     .option {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      border-radius: 5px;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 8px;
       background: #f8fafc;
       border: 2px solid transparent;
       transition: all 0.2s ease;
@@ -432,7 +420,7 @@ export const useHtmlGenerator = () => {
     }
     
     .question-content-container {
-      margin-bottom: 5px;
+      margin-bottom: 16px;
     }
     
     .show-answer-btn {
@@ -499,53 +487,10 @@ export const useHtmlGenerator = () => {
     }
     
     @media print {
-      body { 
-        background: white; 
-        margin: 0;
-        padding: 0;
-      }
-      .container { 
-        max-width: 100%; 
-        padding: 8px 12px; 
-        margin: 0;
-      }
-      .header {
-        padding: 5px 10px;
-        margin-bottom: 5px;
-      }
-      .header h1 {
-        font-size: 14px;
-      }
-      .part-section {
-        margin-bottom: 6px;
-      }
-      .part-header {
-        padding: 4px 10px;
-        margin-bottom: 4px;
-        page-break-after: avoid;
-      }
-      .question { 
-        page-break-inside: avoid;
-        padding: 5px 0;
-      }
-      .question-header {
-        margin-bottom: 3px;
-      }
-      .question-content-container {
-        margin-bottom: 4px;
-      }
-      .options {
-        gap: 4px;
-        margin-top: 4px;
-      }
-      .option {
-        padding: 3px 6px;
-      }
+      body { background: white; }
+      .container { max-width: 100%; padding: 10px; }
+      .question { page-break-inside: avoid; }
       .show-answer-btn { display: none; }
-      .footer {
-        padding: 8px;
-        margin-top: 8px;
-      }
     }
     
     @media (max-width: 640px) {
@@ -585,8 +530,8 @@ export const useHtmlGenerator = () => {
       const a = document.createElement('a');
       a.href = url;
       const modeLabel = mode === 'quiz' ? 'Quiz' : 'AnswerKey';
-      const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' :
-        downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' : 
+                         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
       a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${langSuffix}_${new Date().toISOString().split('T')[0]}.html`;
       document.body.appendChild(a);
       a.click();
