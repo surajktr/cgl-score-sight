@@ -1,7 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AnalysisResult } from '@/lib/mockData';
-import { type ExamType, type Language, getExamConfig } from '@/lib/examConfig';
-import { analyzeResponseSheetLocal } from '@/lib/localParser';
+import type { ExamType, Language } from '@/lib/examConfig';
 
 interface AnalyzeResponse {
   success: boolean;
@@ -78,26 +77,6 @@ export async function analyzeResponseSheet(
 
     if (error) {
       console.error('Edge function error:', error);
-      console.log('Attempting local analysis fallback...');
-
-      // Fallback: Try fetching HTML via proxy and parse locally
-      const html = await fetchHtmlViaProxy(url);
-
-      if (html) {
-        console.log('Got HTML via CORS proxy, performing local analysis...');
-        try {
-          const examConfig = getExamConfig(examType);
-          const result = analyzeResponseSheetLocal(html, url, examConfig, language);
-          return { success: true, data: result };
-        } catch (localErr) {
-          console.error('Local analysis error:', localErr);
-          return {
-            success: false,
-            error: 'Local analysis failed: ' + (localErr as Error).message
-          };
-        }
-      }
-
       return {
         success: false,
         error: error.message || 'Failed to analyze response sheet'
@@ -114,18 +93,20 @@ export async function analyzeResponseSheet(
       const html = await fetchHtmlViaProxy(url);
 
       if (html) {
-        console.log('Got HTML via CORS proxy, performing local analysis...');
-        try {
-          const examConfig = getExamConfig(examType);
-          const result = analyzeResponseSheetLocal(html, url, examConfig, language);
-          return { success: true, data: result };
-        } catch (localErr) {
-          console.error('Local analysis error:', localErr);
+        console.log('Got HTML via CORS proxy, retrying analysis...');
+        const { data: retryData, error: retryError } = await supabase.functions.invoke('analyze-response-sheet', {
+          body: { url, examType, language, html },
+        });
+
+        if (retryError) {
+          console.error('Retry edge function error:', retryError);
           return {
             success: false,
-            error: 'Local analysis failed: ' + (localErr as Error).message
+            error: retryError.message || 'Failed to analyze response sheet'
           };
         }
+
+        return retryData as AnalyzeResponse;
       }
 
       // If all client-side methods fail, return informative error
