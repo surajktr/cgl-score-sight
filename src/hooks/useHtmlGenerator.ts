@@ -245,23 +245,23 @@ export const useHtmlGenerator = () => {
     .container {
       max-width: 900px;
       margin: 0 auto;
-      padding: 15px;
+      padding: 10px;
     }
     
     .header {
       background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       color: white;
-      padding: 12px 20px;
-      border-radius: 8px;
+      padding: 8px 15px;
+      border-radius: 6px;
       text-align: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       page-break-after: avoid;
     }
     
     .header h1 {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
     
     .header .mode-badge {
@@ -275,23 +275,18 @@ export const useHtmlGenerator = () => {
     }
     
     .part-section {
-      margin-bottom: 16px;
-      page-break-before: always;
-    }
-    
-    .part-section:first-child {
-      page-break-before: avoid;
+      margin-bottom: 12px;
     }
     
     .part-header {
       background: linear-gradient(135deg, #1e40af, #3b82f6);
       color: white;
-      padding: 8px 16px;
-      border-radius: 6px;
+      padding: 5px 12px;
+      border-radius: 5px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
+      gap: 8px;
+      margin-bottom: 6px;
       flex-wrap: wrap;
       page-break-after: avoid;
     }
@@ -320,7 +315,7 @@ export const useHtmlGenerator = () => {
     }
     
     .question {
-      padding: 10px 0;
+      padding: 6px 0;
       border-bottom: 1px solid #e5e7eb;
       page-break-inside: avoid;
     }
@@ -330,7 +325,7 @@ export const useHtmlGenerator = () => {
     }
     
     .question-header {
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
     
     .question-number {
@@ -352,16 +347,16 @@ export const useHtmlGenerator = () => {
     .options {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 8px;
+      gap: 5px;
+      margin-top: 5px;
     }
     
     .option {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border-radius: 6px;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 5px;
       background: #f8fafc;
       border: 2px solid transparent;
       transition: all 0.2s ease;
@@ -437,7 +432,7 @@ export const useHtmlGenerator = () => {
     }
     
     .question-content-container {
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
     
     .show-answer-btn {
@@ -511,49 +506,45 @@ export const useHtmlGenerator = () => {
       }
       .container { 
         max-width: 100%; 
-        padding: 10px 15px; 
+        padding: 8px 12px; 
         margin: 0;
       }
       .header {
-        padding: 8px 15px;
-        margin-bottom: 8px;
+        padding: 5px 10px;
+        margin-bottom: 5px;
       }
       .header h1 {
-        font-size: 16px;
+        font-size: 14px;
       }
       .part-section {
-        page-break-before: always;
-        margin-bottom: 10px;
-      }
-      .part-section:first-child {
-        page-break-before: avoid;
+        margin-bottom: 6px;
       }
       .part-header {
-        padding: 6px 12px;
-        margin-bottom: 8px;
+        padding: 4px 10px;
+        margin-bottom: 4px;
         page-break-after: avoid;
       }
       .question { 
         page-break-inside: avoid;
-        padding: 8px 0;
+        padding: 5px 0;
       }
       .question-header {
-        margin-bottom: 4px;
+        margin-bottom: 3px;
       }
       .question-content-container {
-        margin-bottom: 6px;
+        margin-bottom: 4px;
       }
       .options {
-        gap: 6px;
-        margin-top: 6px;
+        gap: 4px;
+        margin-top: 4px;
       }
       .option {
-        padding: 5px 8px;
+        padding: 3px 6px;
       }
       .show-answer-btn { display: none; }
       .footer {
-        padding: 10px;
-        margin-top: 10px;
+        padding: 8px;
+        margin-top: 8px;
       }
     }
     

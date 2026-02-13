@@ -149,11 +149,11 @@ function parseCandidateInfo(html: string): CandidateInfo {
 
     return {
         rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
-        name: getTableValue('Candidate Name') || getTableValue('Name') || '',
-        examLevel: getTableValue('Exam Level') || '',
+        name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
+        examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
         testDate: getTableValue('Test Date') || '',
         shift: getTableValue('Test Time') || getTableValue('Shift') || '',
-        centreName: getTableValue('Centre Name') || getTableValue('Center Name') || '',
+        centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || '',
     };
 }
 
