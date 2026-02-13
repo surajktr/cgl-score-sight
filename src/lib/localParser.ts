@@ -427,10 +427,27 @@ function parseAnswerKeyFormat(
         globalQuestionNumber++;
 
         const qPos = questionPanelPositions[i - 1] || 0;
-        const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
+        const qPos = questionPanelPositions[i - 1] || 0;
+        let { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
+
+        // FIX: Manual subject mapping for CGL Mains to fix distribution issues
+        if (examConfig.id === 'SSC_CGL_MAINS') {
+            if (globalQuestionNumber <= 30) {
+                currentSubject = examConfig.subjects[0]; // Math
+            } else if (globalQuestionNumber <= 60) {
+                currentSubject = examConfig.subjects[1]; // Reasoning
+            } else if (globalQuestionNumber <= 105) {
+                currentSubject = examConfig.subjects[2]; // English
+            } else if (globalQuestionNumber <= 130) {
+                currentSubject = examConfig.subjects[3]; // GA
+            } else {
+                currentSubject = examConfig.subjects[4]; // Computer
+            }
+            currentPart = currentSubject.part;
+        }
 
         const qNumMatch = panelContent.match(/Q\.(\d+)/i);
-        // const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
+        const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
 
         let questionText = '';
         let questionImageUrl = '';
@@ -586,7 +603,7 @@ function parseAnswerKeyFormat(
         }
 
         questions.push({
-            questionNumber: globalQuestionNumber,
+            questionNumber: displayQNum,
             part: currentPart,
             subject: currentSubject.name,
             questionImageUrl,
