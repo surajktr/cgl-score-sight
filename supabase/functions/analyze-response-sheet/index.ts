@@ -690,6 +690,7 @@ function parseAnswerKeyFormat(
   const resolveUrl = (src: string): string => {
     if (!src) return '';
     if (src.startsWith('http://') || src.startsWith('https://')) return src;
+    if (src.startsWith('data:')) return src;
     if (src.startsWith('//')) return 'https:' + src;
     if (src.startsWith('/')) {
       // Absolute path from origin - extract origin from baseUrl
@@ -801,6 +802,25 @@ function parseAnswerKeyFormat(
         }
       }
       
+      // Extract alt text from Wirisformula images as question text
+      if (!textContent || textContent.length <= 3) {
+        const altMatch = rawContent.match(/<img[^>]+alt\s*=\s*["']([^"']+)["'][^>]*>/i);
+        if (altMatch) {
+          questionText = altMatch[1]
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/begin mathsize \d+px style\s*/i, '')
+            .replace(/\s*end style$/i, '')
+            .replace(/ space /g, ' ')
+            .replace(/ comma /g, ', ')
+            .replace(/ squared /g, '² ')
+            .trim();
+        }
+      }
+
       if (textContent.length > 3) {
         questionText = textContent;
       }
