@@ -4,7 +4,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
 import { analyzeResponseSheet } from '@/lib/api/analyzeSheet';
 import type { AnalysisResult } from '@/lib/mockData';
-import type { ExamType, Language } from '@/lib/examConfig';
+import { EXAM_CONFIGS, type ExamType, type Language } from '@/lib/examConfig';
 import { FileText, Shield, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -25,6 +25,24 @@ const Index = () => {
     // Start the API call
     analysisPromise.current = analyzeResponseSheet(url, examType, language).then(response => {
       if (response.success && response.data) {
+        // Override with correct local examConfig to fix stale Supabase config
+        const localConfig = EXAM_CONFIGS[examType];
+        if (localConfig) {
+          response.data.examConfig = localConfig;
+          response.data.maxScore = localConfig.maxMarks;
+          // Recalculate section isQualifying and totalScore from local config
+          for (const section of response.data.sections) {
+            const localSubject = localConfig.subjects.find(s => s.part === section.part);
+            if (localSubject) {
+              section.isQualifying = localSubject.isQualifying;
+            } else {
+              section.isQualifying = false;
+            }
+          }
+          response.data.totalScore = response.data.sections.reduce(
+            (sum, s) => s.isQualifying ? sum : sum + s.score, 0
+          );
+        }
         setAnalysisResult(response.data);
       } else {
         toast({

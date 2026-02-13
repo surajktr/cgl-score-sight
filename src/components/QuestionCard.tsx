@@ -8,6 +8,33 @@ interface QuestionCardProps {
 }
 
 export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCardProps) => {
+  const formatQuestionText = (text: string) => {
+    const normalized = text.replace(/\r\n?/g, '\n');
+    // If the text already has line breaks for options, keep as-is.
+    if (/\n\s*[A-D][\)\.\:]/.test(normalized)) return normalized;
+
+    // If a long multi-statement question is coming in a single line, add line breaks
+    // between sentences and before common stems like "Which of the above".
+    if (!normalized.includes('\n') && normalized.length > 180) {
+      const withStemBreak = normalized.replace(/\s+(?=Which\s+of\s+the\s+(?:above|following)\b)/i, '\n\n');
+      const sentenceSplitCount = (withStemBreak.match(/\./g) || []).length;
+      if (sentenceSplitCount >= 3) {
+        return withStemBreak
+          .replace(/\.\s+(?=[A-Z])/g, '.\n')
+          .replace(/^\n+/, '');
+      }
+      return withStemBreak.replace(/^\n+/, '');
+    }
+
+    // Insert line breaks before option markers when they appear in a single line.
+    // Handles: "A)", "A.", "A:" (and similarly B/C/D)
+    const withBreaks = normalized
+      .replace(/\s+(?=[A-D][\)\.\:])/g, '\n')
+      .replace(/(?<!\n)(?=[A-D][\)\.\:])/g, '\n');
+
+    return withBreaks.replace(/^\n+/, '');
+  };
+
   const getStatusBadge = () => {
     if (question.status === 'bonus' || question.isBonus) {
       return (
@@ -122,11 +149,6 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
 
       {/* Question Content - Text and/or Image */}
       <div className="mb-3">
-        {question.questionText && (
-          <p className="text-foreground text-sm leading-relaxed mb-2 whitespace-pre-line">
-            {question.questionText}
-          </p>
-        )}
         {hasQuestionImage ? (
           <img
             src={questionImageUrl}
@@ -138,11 +160,15 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
               target.style.display = 'none';
             }}
           />
-        ) : !question.questionText ? (
+        ) : question.questionText ? (
+          <p className="text-foreground text-sm leading-relaxed mb-2 whitespace-pre-line break-words">
+            {formatQuestionText(question.questionText)}
+          </p>
+        ) : (
           <div className="text-muted-foreground text-sm italic py-2">
             Question image not available
           </div>
-        ) : null}
+        )}
       </div>
 
       {/* Options - Vertical Layout */}
@@ -174,7 +200,7 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
                       }}
                     />
                   )}
-                  {hasOptionText && (
+                  {!hasOptionImage && hasOptionText && (
                     <span className="text-foreground text-sm">{option.text}</span>
                   )}
                 </div>

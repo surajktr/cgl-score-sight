@@ -9,8 +9,8 @@ export const CandidateInfoCard = ({ candidate }: CandidateInfoCardProps) => {
   const infoItems = [
     { icon: FileText, label: 'Roll Number', value: candidate.rollNumber },
     { icon: User, label: 'Candidate Name', value: candidate.name },
-    { icon: Award, label: 'Exam Level', value: candidate.examLevel },
-    { icon: Calendar, label: 'Test Date', value: candidate.testDate },
+    { icon: Award, label: 'Exam Name', value: candidate.examLevel },
+    { icon: Calendar, label: 'Exam Date', value: candidate.testDate },
     { icon: Clock, label: 'Shift', value: candidate.shift },
     { icon: MapPin, label: 'Centre', value: candidate.centreName },
   ];

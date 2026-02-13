@@ -20,6 +20,23 @@ export const useHtmlGenerator = () => {
       const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' :
         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
 
+      const formatQuestionText = (text: string) => {
+        const normalized = text.replace(/\r\n?/g, '\n');
+        if (/\n\s*[A-D][\)\.\:]/.test(normalized)) return normalized;
+
+        if (!normalized.includes('\n') && normalized.length > 180) {
+          const withStemBreak = normalized.replace(/\s+(?=Which\s+of\s+the\s+(?:above|following)\b)/i, '\n\n');
+          const sentenceSplitCount = (withStemBreak.match(/\./g) || []).length;
+          if (sentenceSplitCount >= 3) {
+            return withStemBreak.replace(/\.\s+(?=[A-Z])/g, '.\n').replace(/^\n+/, '');
+          }
+          return withStemBreak.replace(/^\n+/, '');
+        }
+
+        const withBreaks = normalized.replace(/\s+(?=[A-D][\)\.\:])/g, '\n');
+        return withBreaks.replace(/^\n+/, '');
+      };
+
       // Helper function to get correct image URL based on language preference
       const getQuestionImageUrl = (question: typeof result.questions[0]) => {
         if (downloadLanguage === 'bilingual') {
@@ -130,7 +147,7 @@ export const useHtmlGenerator = () => {
           const hasQuestionText = question.questionText && question.questionText.trim() !== '';
 
           if (hasQuestionText) {
-            questionContentHtml += `<p class="question-text-content">${question.questionText}</p>`;
+            questionContentHtml += `<p class="question-text-content">${formatQuestionText(question.questionText!)}</p>`;
           }
 
           if (questionImg.bilingual && 'hindi' in questionImg && 'english' in questionImg) {
@@ -422,6 +439,9 @@ export const useHtmlGenerator = () => {
       font-size: 14px;
       color: #1e293b;
       line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     
     .question-text-content {
@@ -429,6 +449,9 @@ export const useHtmlGenerator = () => {
       color: #1e293b;
       line-height: 1.6;
       margin-bottom: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     
     .question-content-container {

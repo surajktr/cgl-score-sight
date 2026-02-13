@@ -14,6 +14,19 @@ interface CandidateInfo {
   centreName: string;
 }
 
+function mergeCandidateInfo(current: CandidateInfo | null, incoming: CandidateInfo): CandidateInfo {
+  if (!current) return incoming;
+
+  return {
+    rollNumber: current.rollNumber || incoming.rollNumber,
+    name: current.name || incoming.name,
+    examLevel: current.examLevel || incoming.examLevel,
+    testDate: current.testDate || incoming.testDate,
+    shift: current.shift || incoming.shift,
+    centreName: current.centreName || incoming.centreName,
+  };
+}
+
 interface QuestionData {
   questionNumber: number;
   part: string;
@@ -103,9 +116,9 @@ const EXAM_CONFIGS: Record<string, ExamConfig> = {
       { name: 'Mathematical Abilities', part: 'A', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
       { name: 'Reasoning & General Intelligence', part: 'B', totalQuestions: 30, maxMarks: 90, correctMarks: 3, negativeMarks: 1 },
       { name: 'English Language & Comprehension', part: 'C', totalQuestions: 45, maxMarks: 135, correctMarks: 3, negativeMarks: 1 },
-      { name: 'General Awareness', part: 'D', totalQuestions: 25, maxMarks: 75, correctMarks: 3, negativeMarks: 0.50, isQualifying: true },
+      { name: 'General Awareness', part: 'D', totalQuestions: 25, maxMarks: 75, correctMarks: 3, negativeMarks: 0.50 },
       { name: 'Computer Knowledge', part: 'E', totalQuestions: 20, maxMarks: 60, correctMarks: 3, negativeMarks: 0.50, isQualifying: true },
-    ], totalQuestions: 150, maxMarks: 450,
+    ], totalQuestions: 150, maxMarks: 390,
   },
   SSC_CHSL_PRE: {
     id: 'SSC_CHSL_PRE', name: 'SSC CHSL PRE (Tier-I)', displayName: 'SSC CHSL Tier-I', emoji: '🟣',
@@ -331,15 +344,31 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
 
 // Parse candidate info from the HTML
 function parseCandidateInfo(html: string): CandidateInfo {
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   const getTableValue = (label: string): string => {
+    const escapedLabel = escapeRegExp(label);
+
+    // Capture the full contents of the value <td> to support nested tags.
     const regex = new RegExp(
-      `<td[^>]*>[^<]*${label}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+      `<td[^>]*>\\s*[^<]*${escapedLabel}[^<]*\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
       'i'
     );
     const match = html.match(regex);
     if (match) {
-      return match[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      return stripHtml(match[1]);
     }
+
+    // Fallback for some formats where the value is plain text right after <td>
+    const regexPlain = new RegExp(
+      `<td[^>]*>[^<]*${escapedLabel}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+      'i'
+    );
+    const matchPlain = html.match(regexPlain);
+    if (matchPlain) {
+      return matchPlain[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
     return '';
   };
 
@@ -349,7 +378,7 @@ function parseCandidateInfo(html: string): CandidateInfo {
     examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
     testDate: getTableValue('Test Date') || '',
     shift: getTableValue('Test Time') || getTableValue('Shift') || '',
-    centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || '',
+    centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue Name') || getTableValue('Venue') || '',
   };
 }
 
@@ -739,7 +768,7 @@ function parseAnswerKeyFormat(
 
   // Find all question-pnl positions to map them to sections
   const questionPanelPositions: number[] = [];
-  const qpnlRegex = /class\s*=\s*["']question-pnl["']/gi;
+  const qpnlRegex = /class\s*=\s*["'][^"']*\bquestion-pnl\b[^"']*["']/gi;
   let qpnlMatch;
   while ((qpnlMatch = qpnlRegex.exec(html)) !== null) {
     questionPanelPositions.push(qpnlMatch.index);
@@ -760,7 +789,7 @@ function parseAnswerKeyFormat(
   };
 
   // Split by question-pnl to get individual questions
-  const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
+  const questionPanels = html.split(/class\s*=\s*["'][^"']*\bquestion-pnl\b[^"']*["']/i);
   console.log('Found', questionPanels.length - 1, 'question panels');
 
   let globalQuestionNumber = 0;
@@ -1240,8 +1269,9 @@ serve(async (req) => {
     for (const result of results) {
       allQuestions = allQuestions.concat(result.questions);
 
-      if (!candidate && result.html) {
-        candidate = parseCandidateInfo(result.html);
+      if (result.html) {
+        const parsedCandidate = parseCandidateInfo(result.html);
+        candidate = mergeCandidateInfo(candidate, parsedCandidate);
       }
     }
 

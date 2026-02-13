@@ -144,15 +144,31 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
 
 // Parse candidate info from the HTML
 function parseCandidateInfo(html: string): CandidateInfo {
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     const getTableValue = (label: string): string => {
+        const escapedLabel = escapeRegExp(label);
+
+        // Capture the full contents of the value <td> to support nested tags.
         const regex = new RegExp(
-            `<td[^>]*>[^<]*${label}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+            `<td[^>]*>\\s*[^<]*${escapedLabel}[^<]*\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
             'i'
         );
         const match = html.match(regex);
         if (match) {
-            return match[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+            return stripHtml(match[1]);
         }
+
+        // Fallback for some formats where the value is plain text right after <td>
+        const regexPlain = new RegExp(
+            `<td[^>]*>[^<]*${escapedLabel}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+            'i'
+        );
+        const matchPlain = html.match(regexPlain);
+        if (matchPlain) {
+            return matchPlain[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
         return '';
     };
 
@@ -400,7 +416,7 @@ function parseAnswerKeyFormat(
     });
 
     const questionPanelPositions: number[] = [];
-    const qpnlRegex = /class\s*=\s*["']question-pnl["']/gi;
+    const qpnlRegex = /class\s*=\s*["'][^"']*\bquestion-pnl\b[^"']*["']/gi;
     let qpnlMatch;
     while ((qpnlMatch = qpnlRegex.exec(html)) !== null) {
         questionPanelPositions.push(qpnlMatch.index);
@@ -419,7 +435,7 @@ function parseAnswerKeyFormat(
         return { subject, part: subject.part };
     };
 
-    const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
+    const questionPanels = html.split(/class\s*=\s*["'][^"']*\bquestion-pnl\b[^"']*["']/i);
     let globalQuestionNumber = 0;
 
     for (let i = 1; i < questionPanels.length; i++) {
