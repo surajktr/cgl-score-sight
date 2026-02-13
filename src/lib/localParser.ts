@@ -401,15 +401,43 @@ function parseAnswerKeyFormat(
 
     const sectionToSubjectIndex: Record<number, number> = {};
     sectionLabels.forEach((section, idx) => {
+        const sectionNameLower = section.name.toLowerCase();
+
+        // First try matching by subject name keywords (handles CGL Mains where Module I/II repeat)
+        let matched = false;
+        for (let si = 0; si < examConfig.subjects.length; si++) {
+            const subjectName = examConfig.subjects[si].name.toLowerCase();
+            // Extract key words from subject name for matching
+            const keywords = subjectName.split(/[\s&]+/).filter(w => w.length > 2);
+            const matchCount = keywords.filter(kw => sectionNameLower.includes(kw)).length;
+            // Require at least 2 keyword matches, or 1 if the subject name is short
+            if (matchCount >= Math.min(2, keywords.length) && matchCount > 0) {
+                // Check this subject isn't already mapped by a previous section
+                const alreadyMapped = Object.values(sectionToSubjectIndex).includes(si);
+                if (!alreadyMapped) {
+                    sectionToSubjectIndex[idx] = si;
+                    matched = true;
+                    break;
+                }
+            }
+        }
+        if (matched) return;
+
+        // Fallback: try Module roman numeral pattern (works when modules are I through V sequentially)
         const moduleMatch = section.name.match(/Module\s+([IV]+)/i);
         if (moduleMatch) {
             const romanToNum: Record<string, number> = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4 };
             const moduleIdx = romanToNum[moduleMatch[1].toUpperCase()];
             if (moduleIdx !== undefined && moduleIdx < examConfig.subjects.length) {
-                sectionToSubjectIndex[idx] = moduleIdx;
-                return;
+                const alreadyMapped = Object.values(sectionToSubjectIndex).includes(moduleIdx);
+                if (!alreadyMapped) {
+                    sectionToSubjectIndex[idx] = moduleIdx;
+                    return;
+                }
             }
         }
+
+        // Last fallback: map by order
         if (idx < examConfig.subjects.length) {
             sectionToSubjectIndex[idx] = idx;
         }
@@ -421,6 +449,20 @@ function parseAnswerKeyFormat(
     while ((qpnlMatch = qpnlRegex.exec(html)) !== null) {
         questionPanelPositions.push(qpnlMatch.index);
     }
+
+    const useSequentialSubjectMapping = examConfig.id === 'SSC_CGL_MAINS';
+
+    const getSubjectForSequentialIndex = (sequentialIndex: number): { subject: SubjectConfig; part: string } => {
+        let runningTotal = 0;
+        for (const subject of examConfig.subjects) {
+            runningTotal += subject.totalQuestions;
+            if (sequentialIndex <= runningTotal) {
+                return { subject, part: subject.part };
+            }
+        }
+        const last = examConfig.subjects[examConfig.subjects.length - 1];
+        return { subject: last, part: last.part };
+    };
 
     const getSubjectForPosition = (pos: number): { subject: SubjectConfig; part: string } => {
         let sectionIdx = 0;
@@ -437,13 +479,18 @@ function parseAnswerKeyFormat(
 
     const questionPanels = html.split(/class\s*=\s*["'][^"']*\bquestion-pnl\b[^"']*["']/i);
     let globalQuestionNumber = 0;
+    let sequentialQuestionNumber = 0;
 
     for (let i = 1; i < questionPanels.length; i++) {
         const panelContent = questionPanels[i];
         globalQuestionNumber++;
 
+        sequentialQuestionNumber++;
+
         const qPos = questionPanelPositions[i - 1] || 0;
-        const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
+        const { subject: currentSubject, part: currentPart } = useSequentialSubjectMapping
+            ? getSubjectForSequentialIndex(sequentialQuestionNumber)
+            : getSubjectForPosition(qPos);
 
         const qNumMatch = panelContent.match(/Q\.(\d+)/i);
         // const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
@@ -602,7 +649,7 @@ function parseAnswerKeyFormat(
         }
 
         questions.push({
-            questionNumber: globalQuestionNumber,
+            questionNumber: useSequentialSubjectMapping ? sequentialQuestionNumber : globalQuestionNumber,
             part: currentPart,
             subject: currentSubject.name,
             questionImageUrl,

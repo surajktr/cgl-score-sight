@@ -750,17 +750,40 @@ function parseAnswerKeyFormat(
   // Try matching by name similarity or by order
   const sectionToSubjectIndex: Record<number, number> = {};
   sectionLabels.forEach((section, idx) => {
-    // First try Module pattern (Module I, II, III...)
+    const sectionNameLower = section.name.toLowerCase();
+
+    // First try matching by subject name keywords (handles CGL Mains where Module I/II repeat)
+    let matched = false;
+    for (let si = 0; si < examConfig.subjects.length; si++) {
+      const subjectName = examConfig.subjects[si].name.toLowerCase();
+      const keywords = subjectName.split(/[\s&]+/).filter(w => w.length > 2);
+      const matchCount = keywords.filter(kw => sectionNameLower.includes(kw)).length;
+      if (matchCount >= Math.min(2, keywords.length) && matchCount > 0) {
+        const alreadyMapped = Object.values(sectionToSubjectIndex).includes(si);
+        if (!alreadyMapped) {
+          sectionToSubjectIndex[idx] = si;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (matched) return;
+
+    // Fallback: try Module roman numeral pattern (works when modules are I through V sequentially)
     const moduleMatch = section.name.match(/Module\s+([IV]+)/i);
     if (moduleMatch) {
       const romanToNum: Record<string, number> = { 'I': 0, 'II': 1, 'III': 2, 'IV': 3, 'V': 4 };
       const moduleIdx = romanToNum[moduleMatch[1].toUpperCase()];
       if (moduleIdx !== undefined && moduleIdx < examConfig.subjects.length) {
-        sectionToSubjectIndex[idx] = moduleIdx;
-        return;
+        const alreadyMapped = Object.values(sectionToSubjectIndex).includes(moduleIdx);
+        if (!alreadyMapped) {
+          sectionToSubjectIndex[idx] = moduleIdx;
+          return;
+        }
       }
     }
-    // Otherwise map by order
+
+    // Last fallback: map by order
     if (idx < examConfig.subjects.length) {
       sectionToSubjectIndex[idx] = idx;
     }
@@ -773,6 +796,20 @@ function parseAnswerKeyFormat(
   while ((qpnlMatch = qpnlRegex.exec(html)) !== null) {
     questionPanelPositions.push(qpnlMatch.index);
   }
+
+  const useSequentialSubjectMapping = examConfig.id === 'SSC_CGL_MAINS';
+
+  const getSubjectForSequentialIndex = (sequentialIndex: number): { subject: SubjectConfig; part: string } => {
+    let runningTotal = 0;
+    for (const subject of examConfig.subjects) {
+      runningTotal += subject.totalQuestions;
+      if (sequentialIndex <= runningTotal) {
+        return { subject, part: subject.part };
+      }
+    }
+    const last = examConfig.subjects[examConfig.subjects.length - 1];
+    return { subject: last, part: last.part };
+  };
 
   // Map each question position to its section
   const getSubjectForPosition = (pos: number): { subject: SubjectConfig; part: string } => {
@@ -793,15 +830,20 @@ function parseAnswerKeyFormat(
   console.log('Found', questionPanels.length - 1, 'question panels');
 
   let globalQuestionNumber = 0;
+  let sequentialQuestionNumber = 0;
 
   // Process each question panel (skip first element which is before the first question)
   for (let i = 1; i < questionPanels.length; i++) {
     const panelContent = questionPanels[i];
     globalQuestionNumber++;
 
+    sequentialQuestionNumber++;
+
     // Get subject for this question based on its position
     const qPos = questionPanelPositions[i - 1] || 0;
-    const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
+    const { subject: currentSubject, part: currentPart } = useSequentialSubjectMapping
+      ? getSubjectForSequentialIndex(sequentialQuestionNumber)
+      : getSubjectForPosition(qPos);
 
     // Extract question number (Q.1, Q.2, etc.)
     const qNumMatch = panelContent.match(/Q\.(\d+)/i);
@@ -976,13 +1018,13 @@ function parseAnswerKeyFormat(
     }
 
     questions.push({
-      questionNumber: globalQuestionNumber,
+      questionNumber: useSequentialSubjectMapping ? sequentialQuestionNumber : displayQNum,
       part: currentPart,
       subject: currentSubject.name,
+      questionText,
       questionImageUrl,
       questionImageUrlHindi: questionLangUrls.hindi || questionImageUrl,
       questionImageUrlEnglish: questionLangUrls.english || questionImageUrl,
-      questionText: questionText || undefined,
       options,
       status,
       marksAwarded,

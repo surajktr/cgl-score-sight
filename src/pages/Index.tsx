@@ -3,10 +3,91 @@ import { UrlInputForm } from '@/components/UrlInputForm';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { ResultsDashboard } from '@/components/ResultsDashboard';
 import { analyzeResponseSheet } from '@/lib/api/analyzeSheet';
-import type { AnalysisResult } from '@/lib/mockData';
+import type { AnalysisResult, QuestionData, SectionData } from '@/lib/mockData';
 import { EXAM_CONFIGS, type ExamType, type Language } from '@/lib/examConfig';
 import { FileText, Shield, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+// Fix CGL Mains subject distribution: reassign questions by sequential order
+// SSC answer keys reset Q.1-Q.30 per section, so we use order of appearance
+function fixCglMainsSubjectDistribution(data: AnalysisResult): AnalysisResult {
+  if (data.examType !== 'SSC_CGL_MAINS') return data;
+
+  const config = EXAM_CONFIGS.SSC_CGL_MAINS;
+  if (!config) return data;
+
+  // Build ranges from config: [{start:1,end:30,subject}, {start:31,end:60,subject}, ...]
+  const ranges: { start: number; end: number; subject: typeof config.subjects[0] }[] = [];
+  let offset = 0;
+  for (const subject of config.subjects) {
+    ranges.push({ start: offset + 1, end: offset + subject.totalQuestions, subject });
+    offset += subject.totalQuestions;
+  }
+
+  // Sort questions by their current questionNumber (order of appearance)
+  const sortedQuestions = [...data.questions].sort((a, b) => a.questionNumber - b.questionNumber);
+
+  // Reassign sequential numbers and subjects
+  const fixedQuestions: QuestionData[] = sortedQuestions.map((q, idx) => {
+    const seqNum = idx + 1;
+    const range = ranges.find(r => seqNum >= r.start && seqNum <= r.end) || ranges[ranges.length - 1];
+    const isCorrect = q.status === 'correct';
+    const isWrong = q.status === 'wrong';
+    const isBonus = q.status === 'bonus';
+    const marksAwarded = isBonus ? range.subject.correctMarks
+      : isCorrect ? range.subject.correctMarks
+      : isWrong ? -range.subject.negativeMarks
+      : 0;
+
+    return {
+      ...q,
+      questionNumber: seqNum,
+      part: range.subject.part,
+      subject: range.subject.name,
+      marksAwarded,
+    };
+  });
+
+  // Recalculate sections from fixed questions
+  const sections: SectionData[] = config.subjects.map(subject => {
+    const subjectQuestions = fixedQuestions.filter(q => q.subject === subject.name);
+    const correct = subjectQuestions.filter(q => q.status === 'correct').length;
+    const wrong = subjectQuestions.filter(q => q.status === 'wrong').length;
+    const unattempted = subjectQuestions.filter(q => q.status === 'unattempted').length;
+    const bonus = subjectQuestions.filter(q => q.status === 'bonus').length;
+    const score = (correct * subject.correctMarks) - (wrong * subject.negativeMarks) + (bonus * subject.correctMarks);
+
+    return {
+      part: subject.part,
+      subject: subject.name,
+      correct,
+      wrong,
+      unattempted,
+      bonus,
+      score,
+      maxMarks: subject.maxMarks,
+      correctMarks: subject.correctMarks,
+      negativeMarks: subject.negativeMarks,
+      isQualifying: subject.isQualifying,
+    };
+  });
+
+  const totalScore = sections.reduce((sum, s) => s.isQualifying ? sum : sum + s.score, 0);
+
+  return {
+    ...data,
+    examConfig: config,
+    maxScore: config.maxMarks,
+    totalQuestions: fixedQuestions.length,
+    correctCount: fixedQuestions.filter(q => q.status === 'correct').length,
+    wrongCount: fixedQuestions.filter(q => q.status === 'wrong').length,
+    unattemptedCount: fixedQuestions.filter(q => q.status === 'unattempted').length,
+    bonusCount: fixedQuestions.filter(q => q.status === 'bonus').length,
+    totalScore,
+    sections,
+    questions: fixedQuestions,
+  };
+}
 
 type AppState = 'input' | 'loading' | 'results';
 
@@ -25,25 +106,30 @@ const Index = () => {
     // Start the API call
     analysisPromise.current = analyzeResponseSheet(url, examType, language).then(response => {
       if (response.success && response.data) {
-        // Override with correct local examConfig to fix stale Supabase config
-        const localConfig = EXAM_CONFIGS[examType];
-        if (localConfig) {
-          response.data.examConfig = localConfig;
-          response.data.maxScore = localConfig.maxMarks;
-          // Recalculate section isQualifying and totalScore from local config
-          for (const section of response.data.sections) {
-            const localSubject = localConfig.subjects.find(s => s.part === section.part);
-            if (localSubject) {
-              section.isQualifying = localSubject.isQualifying;
-            } else {
-              section.isQualifying = false;
+        // Fix CGL Mains: reassign questions to correct subjects by sequential order
+        // and recalculate all sections/scores with correct local config
+        const fixedData = fixCglMainsSubjectDistribution(response.data);
+
+        // For non-CGL-Mains exams, still override with local config
+        if (fixedData.examType !== 'SSC_CGL_MAINS') {
+          const localConfig = EXAM_CONFIGS[examType];
+          if (localConfig) {
+            fixedData.examConfig = localConfig;
+            fixedData.maxScore = localConfig.maxMarks;
+            for (const section of fixedData.sections) {
+              const localSubject = localConfig.subjects.find(s => s.part === section.part);
+              if (localSubject) {
+                section.isQualifying = localSubject.isQualifying;
+              } else {
+                section.isQualifying = false;
+              }
             }
+            fixedData.totalScore = fixedData.sections.reduce(
+              (sum, s) => s.isQualifying ? sum : sum + s.score, 0
+            );
           }
-          response.data.totalScore = response.data.sections.reduce(
-            (sum, s) => s.isQualifying ? sum : sum + s.score, 0
-          );
         }
-        setAnalysisResult(response.data);
+        setAnalysisResult(fixedData);
       } else {
         toast({
           title: "Analysis Failed",

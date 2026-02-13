@@ -362,8 +362,8 @@ export const useHtmlGenerator = () => {
     }
     
     .options {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 5px;
       margin-top: 5px;
     }
