@@ -80,17 +80,12 @@ function stripHtml(html: string): string {
         .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
 
     // Collapse multiple spaces but preserve newlines
-    let result = text
+    return text
         .split('\n')
         .map(line => line.replace(/\s+/g, ' ').trim())
         .filter(line => line.length > 0)
         .join('\n')
         .trim();
-
-    // Force newlines before A) B) C) etc if they are preceded by text
-    result = result.replace(/([.?])\s+([A-D]\)|[1-4]\)|\([A-D]\)|\([1-4]\))/g, '$1\n$2');
-
-    return result;
 }
 
 // Helper to get Hindi/English URLs from an image URL
@@ -435,7 +430,7 @@ function parseAnswerKeyFormat(
         const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
 
         const qNumMatch = panelContent.match(/Q\.(\d+)/i);
-        const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
+        // const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
 
         let questionText = '';
         let questionImageUrl = '';
@@ -591,7 +586,7 @@ function parseAnswerKeyFormat(
         }
 
         questions.push({
-            questionNumber: displayQNum,
+            questionNumber: globalQuestionNumber,
             part: currentPart,
             subject: currentSubject.name,
             questionImageUrl,

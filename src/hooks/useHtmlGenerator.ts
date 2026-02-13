@@ -251,17 +251,17 @@ export const useHtmlGenerator = () => {
     .header {
       background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       color: white;
-      padding: 4px 10px;
-      border-radius: 4px;
+      padding: 8px 15px;
+      border-radius: 6px;
       text-align: center;
-      margin-bottom: 4px;
+      margin-bottom: 8px;
       page-break-after: avoid;
     }
     
     .header h1 {
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 700;
-      margin-bottom: 1px;
+      margin-bottom: 2px;
     }
     
     .header .mode-badge {
@@ -275,18 +275,18 @@ export const useHtmlGenerator = () => {
     }
     
     .part-section {
-      margin-bottom: 8px;
+      margin-bottom: 12px;
     }
     
     .part-header {
       background: linear-gradient(135deg, #1e40af, #3b82f6);
       color: white;
-      padding: 4px 10px;
-      border-radius: 4px;
+      padding: 5px 12px;
+      border-radius: 5px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-bottom: 4px;
+      gap: 8px;
+      margin-bottom: 6px;
       flex-wrap: wrap;
       page-break-after: avoid;
     }
