@@ -145,7 +145,3 @@ function generateMockQuestions(): QuestionData[] {
 
   return questions;
 }
-
-export function getMockData(examType: ExamType, language: Language): AnalysisResult {
-  return mockAnalysisResult;
-}
