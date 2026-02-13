@@ -20,7 +20,10 @@ function stripHtml(html: string): string {
         .replace(/<sup[^>]*>\s*3\s*<\/sup>/gi, '³')
         .replace(/<sup[^>]*>\s*(\d+)\s*<\/sup>/gi, '^$1')
         .replace(/<sub[^>]*>\s*(\d+)\s*<\/sub>/gi, '₍$1₎')
-        .replace(/<br\s*\/?>/gi, '\n');
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n');
 
     // Strip remaining HTML tags
     text = text.replace(/<[^>]*>/g, '');
@@ -76,7 +79,13 @@ function stripHtml(html: string): string {
         .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
         .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
 
-    return text.replace(/\s+/g, ' ').trim();
+    // Collapse multiple spaces but preserve newlines
+    return text
+        .split('\n')
+        .map(line => line.replace(/\s+/g, ' ').trim())
+        .filter(line => line.length > 0)
+        .join('\n')
+        .trim();
 }
 
 // Helper to get Hindi/English URLs from an image URL
