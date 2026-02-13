@@ -85,9 +85,7 @@ const Index = () => {
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             Analyze Your
-            <span className="block bg-clip-text text-transparent" style={{
-              backgroundImage: 'var(--gradient-hero)'
-            }}>
+            <span className="gradient-text block">
               Response Sheet
             </span>
           </h1>
