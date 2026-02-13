@@ -72,6 +72,10 @@ export const useHtmlGenerator = () => {
 
           const questionImg = getQuestionImageUrl(question);
 
+          // Detect if any option text is long (e.g. > 60 chars) to switch to single column layout
+          const isLongOptions = question.options.some(opt => (opt.text || '').length > 60);
+          const optionsContainerClass = isLongOptions ? 'options single-col' : 'options';
+
           let optionsHtml = '';
           for (const option of question.options) {
             const isCorrectAnswer = option.isCorrect;
@@ -152,7 +156,7 @@ export const useHtmlGenerator = () => {
               <div class="question-content-container">
                 ${questionContentHtml}
               </div>
-              <div class="options">
+              <div class="${optionsContainerClass}">
                 ${optionsHtml}
               </div>
               ${mode === 'quiz' ? `<button class="show-answer-btn" onclick="showAnswer(this)">Show Answer</button>` : ''}
@@ -349,6 +353,10 @@ export const useHtmlGenerator = () => {
       grid-template-columns: 1fr 1fr;
       gap: 5px;
       margin-top: 5px;
+    }
+    
+    .options.single-col {
+      grid-template-columns: 1fr !important;
     }
     
     .option {
