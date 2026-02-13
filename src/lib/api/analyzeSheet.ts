@@ -21,7 +21,7 @@ async function fetchHtmlViaIframe(url: string): Promise<string | null> {
     // Try using fetch with no-cors mode first (won't get body but tests reachability)
     // Then fall back to creating a script tag that loads the HTML as JSONP-style (won't work for SSC)
     // This is a best-effort approach
-    
+
     // For SSC URLs, direct fetch won't work due to CORS
     // Instead, we return null to trigger the "paste HTML" fallback message
     clearTimeout(timeout);
@@ -64,8 +64,8 @@ async function fetchHtmlViaProxy(url: string): Promise<string | null> {
 }
 
 export async function analyzeResponseSheet(
-  url: string, 
-  examType: ExamType, 
+  url: string,
+  examType: ExamType,
   language: Language
 ): Promise<AnalyzeResponse> {
   try {
@@ -77,9 +77,9 @@ export async function analyzeResponseSheet(
 
     if (error) {
       console.error('Edge function error:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Failed to analyze response sheet' 
+      return {
+        success: false,
+        error: error.message || 'Failed to analyze response sheet'
       };
     }
 
@@ -88,10 +88,10 @@ export async function analyzeResponseSheet(
     // Check if server-side fetch was blocked
     if (response.requiresClientFetch) {
       console.log('Server-side fetch blocked, attempting client-side alternatives...');
-      
+
       // Try CORS proxy
       const html = await fetchHtmlViaProxy(url);
-      
+
       if (html) {
         console.log('Got HTML via CORS proxy, retrying analysis...');
         const { data: retryData, error: retryError } = await supabase.functions.invoke('analyze-response-sheet', {
@@ -100,9 +100,9 @@ export async function analyzeResponseSheet(
 
         if (retryError) {
           console.error('Retry edge function error:', retryError);
-          return { 
-            success: false, 
-            error: retryError.message || 'Failed to analyze response sheet' 
+          return {
+            success: false,
+            error: retryError.message || 'Failed to analyze response sheet'
           };
         }
 
@@ -119,9 +119,9 @@ export async function analyzeResponseSheet(
     return response;
   } catch (err) {
     console.error('API error:', err);
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'An unexpected error occurred' 
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'An unexpected error occurred'
     };
   }
 }

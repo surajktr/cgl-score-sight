@@ -47,7 +47,7 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
       }
       return '';
     }
-    
+
     if (option.isSelected && option.isCorrect) {
       return 'bg-correct-bg/50';
     }
@@ -71,7 +71,7 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
       }
       return 'bg-muted text-foreground';
     }
-    
+
     if (option.isSelected && option.isCorrect) {
       return 'bg-correct text-white';
     }
@@ -123,13 +123,13 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
       {/* Question Content - Text and/or Image */}
       <div className="mb-3">
         {question.questionText && (
-          <p className="text-foreground text-sm leading-relaxed mb-2">
+          <p className="text-foreground text-sm leading-relaxed mb-2 whitespace-pre-line">
             {question.questionText}
           </p>
         )}
         {hasQuestionImage ? (
-          <img 
-            src={questionImageUrl} 
+          <img
+            src={questionImageUrl}
             alt={`Question ${question.questionNumber}`}
             className="max-w-full h-auto"
             loading="lazy"
@@ -151,28 +151,33 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
           const optionImageUrl = getOptionImage(option);
           const hasOptionImage = optionImageUrl && optionImageUrl.trim() !== '';
           const hasOptionText = option.text && option.text.trim() !== '';
-          
+
           return (
-            <div 
+            <div
               key={option.id}
               className={`flex items-center gap-3 py-1 px-2 rounded ${getOptionClass(option)}`}
             >
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getOptionLabelClass(option)}`}>
                 {option.id}
               </span>
-              {hasOptionText ? (
-                <span className="text-foreground text-sm">{option.text}</span>
-              ) : hasOptionImage ? (
-                <img 
-                  src={optionImageUrl}
-                  alt={`Option ${option.id}`}
-                  className="max-h-10 h-auto"
-                  loading="lazy"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                  }}
-                />
+              {hasOptionText || hasOptionImage ? (
+                <div className="flex items-center gap-2">
+                  {hasOptionImage && (
+                    <img
+                      src={optionImageUrl}
+                      alt={`Option ${option.id}`}
+                      className="max-h-10 h-auto"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                      }}
+                    />
+                  )}
+                  {hasOptionText && (
+                    <span className="text-foreground text-sm">{option.text}</span>
+                  )}
+                </div>
               ) : (
                 <span className="text-muted-foreground text-sm">Option {option.id}</span>
               )}
@@ -180,7 +185,7 @@ export const QuestionCard = ({ question, displayLanguage = 'hindi' }: QuestionCa
           );
         })}
       </div>
-      
+
       {/* Bonus question note */}
       {(question.status === 'bonus' || question.isBonus) && (
         <div className="mt-3 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg text-purple-700 text-xs">

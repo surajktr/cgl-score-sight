@@ -345,11 +345,11 @@ function parseCandidateInfo(html: string): CandidateInfo {
 
   return {
     rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
-    name: getTableValue('Candidate Name') || getTableValue('Name') || '',
-    examLevel: getTableValue('Exam Level') || '',
+    name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
+    examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
     testDate: getTableValue('Test Date') || '',
     shift: getTableValue('Test Time') || getTableValue('Shift') || '',
-    centreName: getTableValue('Centre Name') || getTableValue('Center Name') || '',
+    centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || '',
   };
 }
 
@@ -549,7 +549,7 @@ function parseQuestionsForPart(
       // Detect bonus question: no option is marked as correct
       const hasCorrectOption = options.some(o => o.isCorrect);
       const isBonus = !hasCorrectOption;
-      
+
       let status: 'correct' | 'wrong' | 'unattempted' | 'bonus' = 'unattempted';
       const hasSelected = options.some(o => o.isSelected);
       const selectedIsCorrect = options.some(o => o.isSelected && o.isCorrect);
@@ -617,10 +617,10 @@ function stripHtml(html: string): string {
     .replace(/<sup[^>]*>\s*(\d+)\s*<\/sup>/gi, '^$1')
     .replace(/<sub[^>]*>\s*(\d+)\s*<\/sub>/gi, '₍$1₎')
     .replace(/<br\s*\/?>/gi, '\n');
-  
+
   // Strip remaining HTML tags
   text = text.replace(/<[^>]*>/g, '');
-  
+
   // Decode HTML entities - comprehensive list
   text = text
     .replace(/&nbsp;/g, ' ')
@@ -671,27 +671,38 @@ function stripHtml(html: string): string {
     // Numeric entities
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
-  
+
   return text.replace(/\s+/g, ' ').trim();
 }
 
 // Parse the AssessmentQPHTMLMode1 answer key format
 function parseAnswerKeyFormat(
-  html: string, 
-  baseUrl: string, 
+  html: string,
+  baseUrl: string,
   examConfig: ExamConfig
 ): { questions: QuestionData[]; candidate: CandidateInfo } {
   console.log('=== PARSING AssessmentQPHTMLMode1 FORMAT v3 (text+image support) ===');
-  
+
   const questions: QuestionData[] = [];
-  
+
   // Helper to resolve relative URLs
+  // baseUrl here is the directory path of the HTML file (e.g., https://host/path/to/dir/)
   const resolveUrl = (src: string): string => {
     if (!src) return '';
     if (src.startsWith('http://') || src.startsWith('https://')) return src;
+    if (src.startsWith('data:')) return src;
     if (src.startsWith('//')) return 'https:' + src;
-    if (src.startsWith('/')) return baseUrl + src;
-    return baseUrl + '/' + src;
+    if (src.startsWith('/')) {
+      // Absolute path from origin - extract origin from baseUrl
+      try {
+        const origin = new URL(baseUrl).origin;
+        return origin + src;
+      } catch {
+        return baseUrl + src;
+      }
+    }
+    // Relative path - resolve against the directory of the HTML file
+    return baseUrl + src;
   };
 
   // Find all section labels with their positions in the HTML
@@ -751,27 +762,27 @@ function parseAnswerKeyFormat(
   // Split by question-pnl to get individual questions
   const questionPanels = html.split(/class\s*=\s*["']question-pnl["']/i);
   console.log('Found', questionPanels.length - 1, 'question panels');
-  
+
   let globalQuestionNumber = 0;
 
   // Process each question panel (skip first element which is before the first question)
   for (let i = 1; i < questionPanels.length; i++) {
     const panelContent = questionPanels[i];
     globalQuestionNumber++;
-    
+
     // Get subject for this question based on its position
     const qPos = questionPanelPositions[i - 1] || 0;
     const { subject: currentSubject, part: currentPart } = getSubjectForPosition(qPos);
-    
+
     // Extract question number (Q.1, Q.2, etc.)
     const qNumMatch = panelContent.match(/Q\.(\d+)/i);
     const displayQNum = qNumMatch ? parseInt(qNumMatch[1]) : globalQuestionNumber;
-    
+
     // Extract question content - look for text in the question row
     // The question text is in a <td class="bold" valign="top"> after the Q.X cell
     let questionText = '';
     let questionImageUrl = '';
-    
+
     // Try to find question text from the bold td after Q.X
     const questionTextMatch = panelContent.match(
       /Q\.\d+<\/td>\s*<td[^>]*class\s*=\s*["']bold["'][^>]*(?:style\s*=\s*["'][^"']*["'])?[^>]*>([\s\S]*?)(?=<\/td>)/i
@@ -780,7 +791,7 @@ function parseAnswerKeyFormat(
       const rawContent = questionTextMatch[1];
       // Check if content has meaningful text (not just images)
       const textContent = stripHtml(rawContent);
-      
+
       // Extract images from the question area
       const qImgMatches = [...rawContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
       for (const match of qImgMatches) {
@@ -790,12 +801,31 @@ function parseAnswerKeyFormat(
           break;
         }
       }
-      
+
+      // Extract alt text from Wirisformula images as question text
+      if (!textContent || textContent.length <= 3) {
+        const altMatch = rawContent.match(/<img[^>]+alt\s*=\s*["']([^"']+)["'][^>]*>/i);
+        if (altMatch) {
+          questionText = altMatch[1]
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/begin mathsize \d+px style\s*/i, '')
+            .replace(/\s*end style$/i, '')
+            .replace(/ space /g, ' ')
+            .replace(/ comma /g, ', ')
+            .replace(/ squared /g, '² ')
+            .trim();
+        }
+      }
+
       if (textContent.length > 3) {
         questionText = textContent;
       }
     }
-    
+
     // If no question text found yet, try extracting from general panel content
     if (!questionText && !questionImageUrl) {
       const allImgMatches = [...panelContent.matchAll(/<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi)];
@@ -807,29 +837,29 @@ function parseAnswerKeyFormat(
         }
       }
     }
-    
+
     const questionLangUrls = getLanguageUrlsFromImage(questionImageUrl);
-    
+
     // Parse options by looking for answer rows
     const options: QuestionData['options'] = [];
     const optionIds = ['A', 'B', 'C', 'D'];
-    
+
     // Find answer options - they have rightAns or wrngAns class
     const answerRowRegex = /<td[^>]*class\s*=\s*["'](rightAns|wrngAns)["'][^>]*>([\s\S]*?)(?=<\/td>)/gi;
     let answerMatch;
     let optIdx = 0;
-    
+
     while ((answerMatch = answerRowRegex.exec(panelContent)) !== null && optIdx < 4) {
       const rowClass = answerMatch[1];
       const rowContent = answerMatch[2];
-      
+
       const isCorrectAnswer = rowClass === 'rightAns';
       const hasTickMark = rowContent.includes('tick.png');
-      
+
       // Extract option image
       let optionImageUrl = '';
       let optionText = '';
-      
+
       const optImgRegex = /<img[^>]+src\s*=\s*["']([^"']+)["'][^>]*>/gi;
       let optImgMatch;
       while ((optImgMatch = optImgRegex.exec(rowContent)) !== null) {
@@ -839,7 +869,7 @@ function parseAnswerKeyFormat(
           break;
         }
       }
-      
+
       // Extract text content from option (strip images and clean up)
       const textOnly = stripHtml(rowContent);
       // Remove leading option number like "1. " or "2. "
@@ -847,9 +877,9 @@ function parseAnswerKeyFormat(
       if (cleanedText.length > 0) {
         optionText = cleanedText;
       }
-      
+
       const optionLangUrls = getLanguageUrlsFromImage(optionImageUrl);
-      
+
       options.push({
         id: optionIds[optIdx],
         imageUrl: optionImageUrl,
@@ -859,22 +889,22 @@ function parseAnswerKeyFormat(
         isSelected: hasTickMark,
         isCorrect: isCorrectAnswer,
       });
-      
+
       optIdx++;
     }
-    
+
     // Get chosen option from the menu table
     const chosenMatch = panelContent.match(/Chosen\s+Option\s*:[\s\S]*?<td[^>]*class\s*=\s*["']bold["'][^>]*>\s*([^<\s]+)/i);
     const chosenOption = chosenMatch ? chosenMatch[1].trim() : '';
-    
+
     // Check for bonus question (no correct answer marked)
     const hasCorrectOption = options.some(o => o.isCorrect);
     const isBonus = !hasCorrectOption;
-    
+
     // Determine status
     let status: 'correct' | 'wrong' | 'unattempted' | 'bonus' = 'unattempted';
     let hasSelected = options.some(o => o.isSelected);
-    
+
     if (isBonus) {
       status = 'bonus';
     } else if (chosenOption === '--' || chosenOption === '' || chosenOption.includes('--')) {
@@ -893,7 +923,7 @@ function parseAnswerKeyFormat(
         status = selectedIsCorrect ? 'correct' : 'wrong';
       }
     }
-    
+
     // Calculate marks
     const marksAwarded = status === 'bonus'
       ? currentSubject.correctMarks
@@ -902,7 +932,7 @@ function parseAnswerKeyFormat(
         : status === 'wrong'
           ? -currentSubject.negativeMarks
           : 0;
-    
+
     // Ensure we have 4 options
     while (options.length < 4) {
       options.push({
@@ -915,7 +945,7 @@ function parseAnswerKeyFormat(
         isCorrect: false,
       });
     }
-    
+
     questions.push({
       questionNumber: globalQuestionNumber,
       part: currentPart,
@@ -929,10 +959,10 @@ function parseAnswerKeyFormat(
       marksAwarded,
       isBonus,
     });
-    
+
     console.log(`Q${globalQuestionNumber}: Part ${currentPart}, Subject: ${currentSubject.name}, Chosen: ${chosenOption}, Status: ${status}, HasText: ${!!questionText}`);
   }
-  
+
   // Extract candidate info
   const candidate: CandidateInfo = {
     rollNumber: extractValue(html, 'Roll No') || extractValue(html, 'Roll Number') || '',
@@ -942,9 +972,9 @@ function parseAnswerKeyFormat(
     shift: extractValue(html, 'Test Time') || extractValue(html, 'Shift') || '',
     centreName: extractValue(html, 'Centre Name') || '',
   };
-  
+
   console.log('Total questions parsed:', questions.length);
-  
+
   return { questions, candidate };
 }
 
@@ -961,11 +991,11 @@ function extractValue(html: string, label: string): string {
 // Helper to get Hindi/English URLs from an image URL
 function getLanguageUrlsFromImage(imageUrl: string): { hindi?: string; english?: string } {
   if (!imageUrl) return {};
-  
+
   // Check for _en or _hi suffix in filename
   const isEnglish = /_en\.(jpg|jpeg|png|gif)/i.test(imageUrl);
   const isHindi = /_hi\.(jpg|jpeg|png|gif)/i.test(imageUrl);
-  
+
   if (isEnglish) {
     return {
       english: imageUrl,
@@ -977,7 +1007,7 @@ function getLanguageUrlsFromImage(imageUrl: string): { hindi?: string; english?:
       english: imageUrl.replace(/_hi\.(jpg|jpeg|png|gif)/i, '_en.$1'),
     };
   }
-  
+
   // Default: return the URL as both
   return { hindi: imageUrl, english: imageUrl };
 }
@@ -992,7 +1022,7 @@ function calculateSections(questions: QuestionData[], examConfig: ExamConfig): S
     const wrong = partQuestions.filter(q => q.status === 'wrong').length;
     const unattempted = partQuestions.filter(q => q.status === 'unattempted').length;
     const bonus = partQuestions.filter(q => q.status === 'bonus' || q.isBonus).length;
-    
+
     // Score calculation: correct + bonus both get full marks
     const score = (correct + bonus) * subject.correctMarks - wrong * subject.negativeMarks;
 
@@ -1057,20 +1087,22 @@ serve(async (req) => {
 
     // Check if this is an answer key URL (AssessmentQPHTMLMode1 pattern)
     const isAnswerKeyUrl = url.includes('AssessmentQPHTMLMode1') || url.endsWith('.html');
-    
+
     if (isAnswerKeyUrl) {
       console.log('Detected Answer Key URL format - AssessmentQPHTMLMode1');
-      
-      // Extract base URL for resolving relative image paths
-      const urlObj = new URL(url);
-      const baseUrl = urlObj.origin;
-      
+
+      // Extract base directory path for resolving relative image paths
+      // Get the directory path of the HTML file for resolving relative URLs
+      const urlPath = url.split('?')[0];
+      const lastSlashIdx = urlPath.lastIndexOf('/');
+      const baseDir = urlPath.substring(0, lastSlashIdx + 1);
+
       let html = providedHtml;
-      
+
       // If HTML was not provided by client, try to fetch it server-side
       if (!html) {
         console.log('No HTML provided, attempting server-side fetch...');
-        
+
         try {
           const response = await fetch(url, {
             method: 'GET',
@@ -1088,8 +1120,8 @@ serve(async (req) => {
             console.error(`Server-side fetch failed: HTTP ${response.status}`);
             // Return special error code to indicate client-side fetch is needed
             return new Response(
-              JSON.stringify({ 
-                success: false, 
+              JSON.stringify({
+                success: false,
                 error: 'FETCH_BLOCKED',
                 message: 'The SSC server blocked the request. The page will attempt client-side fetching.',
                 requiresClientFetch: true
@@ -1103,8 +1135,8 @@ serve(async (req) => {
         } catch (fetchError) {
           console.error('Server-side fetch error:', fetchError);
           return new Response(
-            JSON.stringify({ 
-              success: false, 
+            JSON.stringify({
+              success: false,
               error: 'FETCH_BLOCKED',
               message: 'Unable to fetch the URL. The page will attempt client-side fetching.',
               requiresClientFetch: true
@@ -1115,15 +1147,15 @@ serve(async (req) => {
       } else {
         console.log('Using client-provided HTML, length:', html.length);
       }
-      
+
       // Parse the AssessmentQPHTMLMode1 format
-      const parsedData = parseAnswerKeyFormat(html, baseUrl, examConfig);
-      
+      const parsedData = parseAnswerKeyFormat(html, baseDir, examConfig);
+
       if (parsedData.questions.length === 0) {
         console.log('No questions found. HTML sample:', html.substring(0, 3000));
         return new Response(
-          JSON.stringify({ 
-            success: false, 
+          JSON.stringify({
+            success: false,
             error: 'Could not parse questions from this answer key format. The page structure may have changed or the HTML is incomplete.'
           }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
