@@ -160,9 +160,9 @@ function parseCandidateInfo(html: string): CandidateInfo {
         rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
         name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
         examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
-        testDate: getTableValue('Test Date') || '',
-        shift: getTableValue('Test Time') || getTableValue('Shift') || '',
-        centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || '',
+        testDate: getTableValue('Test Date') || getTableValue('Exam Date') || '',
+        shift: getTableValue('Test Time') || getTableValue('Shift') || getTableValue('Exam Time') || '',
+        centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || getTableValue('Venue Name') || '',
     };
 }
 
@@ -677,7 +677,8 @@ export function analyzeResponseSheetLocal(
         };
     });
 
-    const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
+    // Exclude qualifying subjects from total score
+    const totalScore = sections.reduce((sum, s) => s.isQualifying ? sum : sum + s.score, 0);
     const correctCount = sections.reduce((sum, s) => sum + s.correct, 0);
     const wrongCount = sections.reduce((sum, s) => sum + s.wrong, 0);
     const unattemptedCount = sections.reduce((sum, s) => sum + s.unattempted, 0);
