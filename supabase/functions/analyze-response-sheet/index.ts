@@ -970,7 +970,7 @@ function parseAnswerKeyFormat(
     examLevel: examConfig.name,
     testDate: extractValue(html, 'Test Date') || '',
     shift: extractValue(html, 'Test Time') || extractValue(html, 'Shift') || '',
-    centreName: extractValue(html, 'Centre Name') || '',
+    centreName: extractValue(html, 'Test Center Name') || extractValue(html, 'Test Centre Name') || extractValue(html, 'Centre Name') || extractValue(html, 'Center Name') || extractValue(html, 'Exam Centre') || extractValue(html, 'Venue') || extractValue(html, 'Venue Name') || '',
   };
 
   console.log('Total questions parsed:', questions.length);
@@ -1170,7 +1170,7 @@ serve(async (req) => {
       const wrongCount = parsedData.questions.filter(q => q.status === 'wrong').length;
       const unattemptedCount = parsedData.questions.filter(q => q.status === 'unattempted').length;
       const bonusCount = parsedData.questions.filter(q => q.status === 'bonus' || q.isBonus).length;
-      const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
+      const totalScore = sections.reduce((sum, s) => s.isQualifying ? sum : sum + s.score, 0);
 
       const analysisResult: AnalysisResult = {
         candidate: parsedData.candidate,
@@ -1280,7 +1280,7 @@ serve(async (req) => {
     const wrongCount = allQuestions.filter(q => q.status === 'wrong').length;
     const unattemptedCount = allQuestions.filter(q => q.status === 'unattempted').length;
     const bonusCount = allQuestions.filter(q => q.status === 'bonus' || q.isBonus).length;
-    const totalScore = sections.reduce((sum, s) => sum + s.score, 0);
+    const totalScore = sections.reduce((sum, s) => s.isQualifying ? sum : sum + s.score, 0);
 
     const analysisResult: AnalysisResult = {
       candidate,
