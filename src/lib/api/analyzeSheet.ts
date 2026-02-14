@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { AnalysisResult } from '@/lib/mockData';
-import type { ExamType, Language } from '@/lib/examConfig';
+import { EXAM_CONFIGS, type ExamType, type Language } from '@/lib/examConfig';
+import { analyzeResponseSheetLocal } from '@/lib/localParser';
 
 interface AnalyzeResponse {
   success: boolean;
@@ -94,20 +95,17 @@ export async function analyzeResponseSheet(
       const html = await fetchHtmlViaProxy(url);
 
       if (html) {
-        console.log('Got HTML via CORS proxy, retrying analysis...');
-        const { data: retryData, error: retryError } = await supabase.functions.invoke('analyze-response-sheet', {
-          body: { url, examType, language, html },
-        });
+        // Use local parser directly to avoid sending large HTML back to server
+        // This also leverages the improved CGL Mains parser we just added
+        console.log('Got HTML via CORS proxy, analyzing locally...');
+        const config = EXAM_CONFIGS[examType];
+        if (!config) throw new Error('Invalid exam type');
 
-        if (retryError) {
-          console.error('Retry edge function error:', retryError);
-          return {
-            success: false,
-            error: retryError.message || 'Failed to analyze response sheet'
-          };
-        }
-
-        return retryData as AnalyzeResponse;
+        const result = analyzeResponseSheetLocal(html, url, config, language);
+        return {
+          success: true,
+          data: result
+        };
       }
 
       // If all client-side methods fail, return informative error

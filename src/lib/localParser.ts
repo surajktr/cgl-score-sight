@@ -11,6 +11,7 @@ import {
     type SectionData,
     type AnalysisResult
 } from './mockData';
+import { parseCGLMainsValues } from './cglMainsParser';
 
 // Helper: strip HTML tags and decode entities, preserve special chars
 function stripHtml(html: string): string {
@@ -705,6 +706,11 @@ export function analyzeResponseSheetLocal(
 
     // Determine format
     const isSSCFormat = html.includes('ViewCandResponse.aspx');
+
+    if (examConfig.id === 'SSC_CGL_MAINS') {
+        console.log('Using specialized CGL Mains parser (scorecard-savvy logic)');
+        return parseCGLMainsValues(html, url, examConfig, language);
+    }
 
     if (isSSCFormat) {
         // For SSC, we can't fully parse multipart locally properly without all parts, 
