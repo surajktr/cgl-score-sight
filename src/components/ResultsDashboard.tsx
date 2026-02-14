@@ -21,7 +21,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
 
   const handleDownloadHtml = async () => {
     try {
-      await generateHtml(result, 'normal', displayLanguage);
+      await generateHtml(result, 'response-sheet', displayLanguage);
       toast({
         title: 'Response Sheet Downloaded',
         description: 'Your HTML response sheet has been downloaded successfully.',

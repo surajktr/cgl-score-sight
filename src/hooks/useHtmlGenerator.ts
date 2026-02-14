@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { AnalysisResult } from '@/lib/mockData';
 import type { DownloadLanguage } from '@/components/DownloadLanguageDialog';
 
-export type HtmlMode = 'normal' | 'quiz';
+export type HtmlMode = 'normal' | 'quiz' | 'response-sheet';
 
 export const useHtmlGenerator = () => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -19,6 +19,7 @@ export const useHtmlGenerator = () => {
       const sections = result.examConfig?.subjects || [];
       const languageLabel = downloadLanguage === 'bilingual' ? 'Bilingual' :
         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
+      const isResponseSheetMode = mode === 'response-sheet';
 
       const formatQuestionText = (text: string) => {
         const normalized = text.replace(/\r\n?/g, '\n');
@@ -50,6 +51,60 @@ export const useHtmlGenerator = () => {
           return { single: question.questionImageUrlEnglish || question.questionImageUrl, bilingual: false };
         }
       };
+
+      const candidateInfoHtml = isResponseSheetMode ? `
+        <section class="candidate-card">
+          <h2>Candidate Information</h2>
+          <div class="candidate-grid">
+            <div><span>Name</span><strong>${result.candidate.name || 'N/A'}</strong></div>
+            <div><span>Roll Number</span><strong>${result.candidate.rollNumber || 'N/A'}</strong></div>
+            <div><span>Exam</span><strong>${result.candidate.examLevel || examName}</strong></div>
+            <div><span>Date</span><strong>${result.candidate.testDate || 'N/A'}</strong></div>
+            <div><span>Shift/Time</span><strong>${result.candidate.shift || 'N/A'}</strong></div>
+            <div><span>Centre</span><strong>${result.candidate.centreName || 'N/A'}</strong></div>
+          </div>
+        </section>
+      ` : '';
+
+      const scoreSummaryHtml = isResponseSheetMode ? `
+        <section class="summary-bar">
+          <div class="summary-item"><span>Total Score</span><strong>${result.totalScore} / ${result.maxScore}</strong></div>
+          <div class="summary-item"><span>Correct</span><strong>${result.correctCount}</strong></div>
+          <div class="summary-item"><span>Wrong</span><strong>${result.wrongCount}</strong></div>
+          <div class="summary-item"><span>Skipped</span><strong>${result.unattemptedCount}</strong></div>
+          <div class="summary-item"><span>Bonus</span><strong>${result.bonusCount || 0}</strong></div>
+        </section>
+      ` : '';
+
+      const sectionTableRows = result.sections.map((section) => `
+        <tr>
+          <td>${section.part}</td>
+          <td>${section.subject}</td>
+          <td>+${section.correctMarks} / -${section.negativeMarks}</td>
+          <td>${section.correct}/${section.wrong}/${section.unattempted}${section.bonus ? ` (+${section.bonus} bonus)` : ''}</td>
+          <td>${section.score.toFixed(1)} / ${section.maxMarks}</td>
+        </tr>
+      `).join('');
+
+      const sectionTableHtml = isResponseSheetMode ? `
+        <section class="section-table-wrap">
+          <h2>Section-wise Score</h2>
+          <table class="section-table">
+            <thead>
+              <tr>
+                <th>Part</th>
+                <th>Subject</th>
+                <th>Marking</th>
+                <th>Breakdown (C/W/S)</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sectionTableRows}
+            </tbody>
+          </table>
+        </section>
+      ` : '';
 
       const getOptionImageUrl = (option: typeof result.questions[0]['options'][0]) => {
         if (downloadLanguage === 'bilingual') {
@@ -120,11 +175,15 @@ export const useHtmlGenerator = () => {
               optionContentHtml = `<span class="option-text">Option ${option.id}</span>`;
             }
 
-            // In normal mode: show correct answer highlighted
+            // In normal/response-sheet mode: show answer and response state
             // In quiz mode: hide answer, reveal on click
-            if (mode === 'normal') {
-              const optionClass = isCorrectAnswer ? 'option-correct' : '';
-              const labelClass = isCorrectAnswer ? 'label-correct' : 'label-default';
+            if (mode !== 'quiz') {
+              const optionClass = mode === 'response-sheet'
+                ? `${isCorrectAnswer ? 'option-correct-answer' : ''} ${option.isSelected && !option.isCorrect ? 'option-selected-wrong' : ''} ${option.isSelected && option.isCorrect ? 'option-selected-correct' : ''}`.trim()
+                : (isCorrectAnswer ? 'option-correct' : '');
+              const labelClass = mode === 'response-sheet'
+                ? (option.isSelected && option.isCorrect ? 'label-correct' : option.isSelected && !option.isCorrect ? 'label-wrong' : isCorrectAnswer ? 'label-correct' : 'label-default')
+                : (isCorrectAnswer ? 'label-correct' : 'label-default');
 
               optionsHtml += `
                 <div class="option ${optionClass}">
@@ -161,10 +220,22 @@ export const useHtmlGenerator = () => {
             questionContentHtml += `<img src="${questionImg.single}" alt="Question ${globalQuestionNumber}" class="question-image" loading="lazy" />`;
           }
 
+          const chosenOption = question.options.find(opt => opt.isSelected)?.id || 'Not Attempted';
+          const correctOption = question.options.find(opt => opt.isCorrect)?.id || 'N/A';
+          const responseIcon = question.status === 'correct' ? '✓' : question.status === 'wrong' ? '✗' : '–';
+          const marksText = question.marksAwarded > 0 ? `+${question.marksAwarded}` : `${question.marksAwarded}`;
+
           questionsHtml += `
             <div class="question">
               <div class="question-header">
                 <span class="question-number">Q.${globalQuestionNumber}</span>
+                ${isResponseSheetMode ? `
+                  <div class="question-meta">
+                    <span class="response-state ${question.status}">${responseIcon} Your: ${chosenOption}</span>
+                    <span class="correct-state">Correct: ${correctOption}</span>
+                    <span class="marks-state ${question.marksAwarded >= 0 ? 'positive' : 'negative'}">${marksText}</span>
+                  </div>
+                ` : ''}
               </div>
               <div class="question-content-container">
                 ${questionContentHtml}
@@ -244,7 +315,7 @@ export const useHtmlGenerator = () => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${examName} - ${mode === 'quiz' ? 'Quiz Mode' : 'Questions'}</title>
+  <title>${examName} - ${mode === 'quiz' ? 'Quiz Mode' : mode === 'response-sheet' ? 'Response Sheet Analysis' : 'Questions'}</title>
   <style>
     * {
       margin: 0;
@@ -280,6 +351,13 @@ export const useHtmlGenerator = () => {
       font-weight: 700;
       margin-bottom: 2px;
     }
+
+    .header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0.95;
+      margin-bottom: 2px;
+    }
     
     .header .mode-badge {
       display: inline-block;
@@ -289,6 +367,98 @@ export const useHtmlGenerator = () => {
       font-size: 12px;
       font-weight: 500;
       margin-top: 8px;
+    }
+
+    .candidate-card,
+    .section-table-wrap {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .candidate-card h2,
+    .section-table-wrap h2 {
+      font-size: 15px;
+      margin-bottom: 8px;
+      color: #0f172a;
+    }
+
+    .candidate-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .candidate-grid div {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .candidate-grid span {
+      font-size: 11px;
+      color: #64748b;
+    }
+
+    .candidate-grid strong {
+      font-size: 13px;
+      color: #0f172a;
+      word-break: break-word;
+    }
+
+    .summary-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .summary-item {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .summary-item span {
+      display: block;
+      font-size: 11px;
+      color: #1d4ed8;
+    }
+
+    .summary-item strong {
+      display: block;
+      font-size: 16px;
+      color: #1e3a8a;
+      margin-top: 2px;
+    }
+
+    .section-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .section-table th,
+    .section-table td {
+      border: 1px solid #e2e8f0;
+      padding: 6px;
+      text-align: left;
+    }
+
+    .section-table th {
+      background: #e2e8f0;
+      color: #0f172a;
     }
     
     .part-section {
@@ -343,7 +513,35 @@ export const useHtmlGenerator = () => {
     
     .question-header {
       margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
     }
+
+    .question-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .question-meta span {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      font-weight: 600;
+    }
+
+    .response-state.correct { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .response-state.wrong { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+    .response-state.unattempted { background: #f1f5f9; border-color: #cbd5e1; color: #334155; }
+    .marks-state.positive { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .marks-state.negative { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
     
     .question-number {
       font-size: 15px;
@@ -442,6 +640,25 @@ export const useHtmlGenerator = () => {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+
+    .response-sheet .question-text-content {
+      font-weight: 700;
+    }
+
+    .option-selected-correct {
+      background: rgba(34, 197, 94, 0.15) !important;
+      border-color: #22c55e !important;
+    }
+
+    .option-selected-wrong {
+      background: rgba(239, 68, 68, 0.15) !important;
+      border-color: #ef4444 !important;
+    }
+
+    .option-correct-answer {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: #f59e0b;
     }
     
     .question-text-content {
@@ -584,12 +801,17 @@ export const useHtmlGenerator = () => {
     }
   </style>
 </head>
-<body>
+<body class="${isResponseSheetMode ? 'response-sheet' : ''}">
   <div class="container">
     <div class="header">
       <h1>${examName}</h1>
-      <div class="mode-badge">${mode === 'quiz' ? '🎯 Quiz Mode - Click options to check answers' : '📋 Answer Key'} • ${languageLabel}</div>
+      ${isResponseSheetMode ? '<h2>Response Sheet Analysis</h2>' : ''}
+      <div class="mode-badge">${mode === 'quiz' ? '🎯 Quiz Mode - Click options to check answers' : mode === 'response-sheet' ? '📋 Response Sheet Analysis' : '📋 Answer Key'} • ${languageLabel}</div>
     </div>
+
+    ${candidateInfoHtml}
+    ${scoreSummaryHtml}
+    ${sectionTableHtml}
     
     ${questionsHtml}
     
@@ -607,7 +829,7 @@ export const useHtmlGenerator = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const modeLabel = mode === 'quiz' ? 'Quiz' : 'AnswerKey';
+      const modeLabel = mode === 'quiz' ? 'Quiz' : mode === 'response-sheet' ? 'ResponseSheet' : 'AnswerKey';
       const langSuffix = downloadLanguage === 'bilingual' ? 'Bilingual' :
         downloadLanguage === 'hindi' ? 'Hindi' : 'English';
       a.download = `${result.examConfig?.displayName || 'Exam'}_${modeLabel}_${langSuffix}_${new Date().toISOString().split('T')[0]}.html`;
