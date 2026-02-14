@@ -4,7 +4,7 @@ import { CandidateInfoCard } from './CandidateInfoCard';
 import { ScoreSummaryCard } from './ScoreSummaryCard';
 import { SectionBreakdown } from './SectionBreakdown';
 import { QuestionsTable, type DisplayLanguage } from './QuestionsTable';
-import { Download, ArrowLeft, Printer, Loader2 } from 'lucide-react';
+import { Download, ArrowLeft, Loader2 } from 'lucide-react';
 import type { AnalysisResult } from '@/lib/mockData';
 import { usePdfGenerator } from '@/hooks/usePdfGenerator';
 import { useToast } from '@/hooks/use-toast';
@@ -61,7 +61,21 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Buttons removed as per user request */}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={isGenerating}
+                className="gap-2"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Download Response Sheet</span>
+                <span className="sm:hidden">Download</span>
+              </Button>
             </div>
           </div>
           
