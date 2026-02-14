@@ -19,21 +19,69 @@ const normalizeCandidateLabel = (value: string) =>
 const parseCandidateInfoFromHtml = (html: string) => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+
+  // Strategy 1: Find the specific candidate info table (User's suggested method)
+  // This is more robust as it targets the table containing specific keys
+  const tables = doc.querySelectorAll('table');
+  for (const table of tables) {
+    const rows = table.querySelectorAll('tr');
+    const info: Record<string, string> = {};
+
+    // Parse this table
+    for (const row of rows) {
+      const tds = row.querySelectorAll('td');
+      if (tds.length >= 2) {
+        const key = (tds[0].textContent || '').replace(/&nbsp;/gi, ' ').trim();
+        const value = (tds[1].textContent || '').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim();
+        if (key) {
+          // Normalize key for map but keep original for strict checks if needed
+          const normKey = key.replace(/[:：]/g, '').toLowerCase();
+          info[normKey] = value;
+          // Also store strict key for debugging or specific lookups
+          info[key] = value;
+        }
+      }
+    }
+
+    // Check if this is the candidate table by looking for essential keys
+    if (info['roll number'] || info['candidate name'] || info['roll no']) {
+      // Helper to safely get value from map
+      const getVal = (...keys: string[]) => {
+        for (const k of keys) {
+          const norm = k.toLowerCase();
+          if (info[norm]) return info[norm];
+        }
+        return '';
+      };
+
+      const splitDateShift = (value: string) => {
+        const normalized = value.replace(/\s+/g, ' ').trim();
+        if (!normalized) return { date: '', shift: '' };
+        const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+        const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN|\d{1,2}:\d{2}\s*(?:AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:AM|PM))\b/i);
+        return {
+          date: dateMatch ? dateMatch[0].trim() : '',
+          shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : ''
+        };
+      };
+
+      const combinedDateShift = getVal('test date & time', 'exam date & time', 'exam date and time', 'date & shift', 'exam date & shift');
+      const derived = splitDateShift(combinedDateShift);
+
+      return {
+        rollNumber: getVal('roll number', 'roll no', 'roll no.'),
+        name: getVal('candidate name', 'participant name', 'name', 'candidate\'s name'),
+        examLevel: getVal('subject', 'exam level', 'post name'),
+        testDate: getVal('test date', 'exam date', 'date of exam', 'examination date') || derived.date,
+        shift: getVal('test time', 'exam time', 'shift', 'exam timing', 'examination time') || derived.shift,
+        centreName: getVal('venue name', 'venue name & address', 'venue address', 'venue', 'center name', 'centre name', 'exam center name', 'test center name', 'test centre name')
+      };
+    }
+  }
+
+  // Fallback: Strategy 2 (Original logic - collecting all KV pairs from all tables)
+  // Use this if the specific table wasn't found above
   const kvMap: Record<string, string> = {};
-
-  const splitDateShift = (value: string) => {
-    const normalized = value.replace(/\s+/g, ' ').trim();
-    if (!normalized) return { date: '', shift: '' };
-
-    const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
-    const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN)\b/i);
-
-    return {
-      date: dateMatch ? dateMatch[0].trim() : '',
-      shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : '',
-    };
-  };
-
   doc.querySelectorAll('tr').forEach((tr) => {
     const tds = tr.querySelectorAll('td');
     if (tds.length >= 2) {
@@ -55,6 +103,17 @@ const parseCandidateInfoFromHtml = (html: string) => {
       }
     }
     return '';
+  };
+
+  const splitDateShift = (value: string) => {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) return { date: '', shift: '' };
+    const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+    const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN)\b/i);
+    return {
+      date: dateMatch ? dateMatch[0].trim() : '',
+      shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : '',
+    };
   };
 
   const explicitDate = get('Exam Date', 'Test Date', 'Date of Exam', 'Examination Date');
@@ -87,6 +146,7 @@ const fetchCandidateInfoFromHtmlUrl = async (url: string) => {
   const proxyUrls = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://thingproxy.freeboard.io/fetch/${url}`,
   ];
 
   for (const proxyUrl of proxyUrls) {
@@ -135,8 +195,8 @@ function fixCglMainsSubjectDistribution(data: AnalysisResult): AnalysisResult {
     const isBonus = q.status === 'bonus';
     const marksAwarded = isBonus ? range.subject.correctMarks
       : isCorrect ? range.subject.correctMarks
-      : isWrong ? -range.subject.negativeMarks
-      : 0;
+        : isWrong ? -range.subject.negativeMarks
+          : 0;
 
     return {
       ...q,
