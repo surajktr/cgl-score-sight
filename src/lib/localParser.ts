@@ -146,6 +146,19 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
 function parseCandidateInfo(html: string): CandidateInfo {
     const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+    const splitDateShift = (value: string) => {
+        const normalized = value.replace(/\s+/g, ' ').trim();
+        if (!normalized) return { date: '', shift: '' };
+
+        const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+        const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN)\b/i);
+
+        return {
+            date: dateMatch ? dateMatch[0].trim() : '',
+            shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : ''
+        };
+    };
+
     const getTableValue = (label: string): string => {
         const escapedLabel = escapeRegExp(label);
 
@@ -172,12 +185,17 @@ function parseCandidateInfo(html: string): CandidateInfo {
         return '';
     };
 
+    const explicitDate = getTableValue('Test Date') || getTableValue('Exam Date') || getTableValue('Examination Date') || getTableValue('Date of Exam') || '';
+    const explicitShift = getTableValue('Test Time') || getTableValue('Shift') || getTableValue('Exam Time') || getTableValue('Examination Time') || getTableValue('Exam Timing') || getTableValue('Exam Shift') || '';
+    const combinedDateShift = getTableValue('Test Date & Time') || getTableValue('Exam Date & Time') || getTableValue('Exam Date and Time') || getTableValue('Date & Shift') || getTableValue('Exam Date & Shift') || '';
+    const derivedFromCombined = splitDateShift(combinedDateShift);
+
     return {
         rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
         name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
         examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
-        testDate: getTableValue('Test Date') || getTableValue('Exam Date') || getTableValue('Examination Date') || getTableValue('Date of Exam') || '',
-        shift: getTableValue('Test Time') || getTableValue('Shift') || getTableValue('Exam Time') || getTableValue('Examination Time') || getTableValue('Exam Timing') || getTableValue('Exam Shift') || '',
+        testDate: explicitDate || derivedFromCombined.date,
+        shift: explicitShift || derivedFromCombined.shift,
         centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || getTableValue('Venue Name') || '',
     };
 }

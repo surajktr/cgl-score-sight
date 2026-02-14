@@ -21,6 +21,19 @@ const parseCandidateInfoFromHtml = (html: string) => {
   const doc = parser.parseFromString(html, 'text/html');
   const kvMap: Record<string, string> = {};
 
+  const splitDateShift = (value: string) => {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) return { date: '', shift: '' };
+
+    const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+    const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN)\b/i);
+
+    return {
+      date: dateMatch ? dateMatch[0].trim() : '',
+      shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : '',
+    };
+  };
+
   doc.querySelectorAll('tr').forEach((tr) => {
     const tds = tr.querySelectorAll('td');
     if (tds.length >= 2) {
@@ -44,12 +57,17 @@ const parseCandidateInfoFromHtml = (html: string) => {
     return '';
   };
 
+  const explicitDate = get('Exam Date', 'Test Date', 'Date of Exam', 'Examination Date');
+  const explicitShift = get('Exam Time', 'Test Time', 'Shift', 'Exam Timing', 'Examination Time', 'Exam Shift');
+  const combinedDateShift = get('Test Date & Time', 'Exam Date & Time', 'Exam Date and Time', 'Date & Shift', 'Exam Date & Shift');
+  const derivedFromCombined = splitDateShift(combinedDateShift);
+
   return {
     rollNumber: get('Roll Number', 'Roll No', 'Roll No.'),
     name: get('Candidate Name', 'Participant Name', 'Name'),
     examLevel: get('Subject', 'Exam Level', 'Post Name'),
-    testDate: get('Exam Date', 'Test Date', 'Date of Exam', 'Examination Date'),
-    shift: get('Exam Time', 'Test Time', 'Shift', 'Exam Timing', 'Examination Time', 'Exam Shift'),
+    testDate: explicitDate || derivedFromCombined.date,
+    shift: explicitShift || derivedFromCombined.shift,
     centreName: get(
       'Venue Name',
       'Venue Name & Address',
