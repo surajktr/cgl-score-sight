@@ -176,8 +176,8 @@ function parseCandidateInfo(html: string): CandidateInfo {
         rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
         name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
         examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
-        testDate: getTableValue('Test Date') || getTableValue('Exam Date') || '',
-        shift: getTableValue('Test Time') || getTableValue('Shift') || getTableValue('Exam Time') || '',
+        testDate: getTableValue('Test Date') || getTableValue('Exam Date') || getTableValue('Examination Date') || getTableValue('Date of Exam') || '',
+        shift: getTableValue('Test Time') || getTableValue('Shift') || getTableValue('Exam Time') || getTableValue('Examination Time') || getTableValue('Exam Timing') || getTableValue('Exam Shift') || '',
         centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue') || getTableValue('Venue Name') || '',
     };
 }

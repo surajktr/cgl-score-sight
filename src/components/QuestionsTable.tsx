@@ -26,7 +26,7 @@ interface QuestionsTableProps {
 type StatusFilter = 'all' | 'correct' | 'wrong' | 'unattempted' | 'bonus';
 type DownloadType = 'html-normal' | 'html-quiz';
 
-export const QuestionsTable = ({ questions, result, displayLanguage = 'hindi', onLanguageChange }: QuestionsTableProps) => {
+export const QuestionsTable = ({ questions, result, displayLanguage = 'english', onLanguageChange }: QuestionsTableProps) => {
   const [partFilter, setPartFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const { generateHtml, isGenerating: isGeneratingHtml } = useHtmlGenerator();

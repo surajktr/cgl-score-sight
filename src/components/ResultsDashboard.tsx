@@ -17,7 +17,7 @@ interface ResultsDashboardProps {
 export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
   const { generateHtml, isGenerating } = useHtmlGenerator();
   const { toast } = useToast();
-  const [displayLanguage, setDisplayLanguage] = useState<DisplayLanguage>('hindi');
+  const [displayLanguage, setDisplayLanguage] = useState<DisplayLanguage>('english');
 
   const handleDownloadHtml = async () => {
     try {

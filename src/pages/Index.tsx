@@ -48,8 +48,8 @@ const parseCandidateInfoFromHtml = (html: string) => {
     rollNumber: get('Roll Number', 'Roll No', 'Roll No.'),
     name: get('Candidate Name', 'Participant Name', 'Name'),
     examLevel: get('Subject', 'Exam Level', 'Post Name'),
-    testDate: get('Exam Date', 'Test Date', 'Date of Exam'),
-    shift: get('Exam Time', 'Test Time', 'Shift', 'Exam Timing'),
+    testDate: get('Exam Date', 'Test Date', 'Date of Exam', 'Examination Date'),
+    shift: get('Exam Time', 'Test Time', 'Shift', 'Exam Timing', 'Examination Time', 'Exam Shift'),
     centreName: get(
       'Venue Name',
       'Venue Name & Address',
