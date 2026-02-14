@@ -35,6 +35,7 @@ async function fetchHtmlViaProxy(url: string): Promise<string | null> {
   const proxies = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    `https://thingproxy.freeboard.io/fetch/${url}`,
   ];
 
   for (const proxyUrl of proxies) {
