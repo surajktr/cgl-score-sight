@@ -6,9 +6,8 @@ import { SectionBreakdown } from './SectionBreakdown';
 import { QuestionsTable, type DisplayLanguage } from './QuestionsTable';
 import { Download, ArrowLeft, Loader2 } from 'lucide-react';
 import type { AnalysisResult } from '@/lib/mockData';
-import { usePdfGenerator } from '@/hooks/usePdfGenerator';
+import { useHtmlGenerator } from '@/hooks/useHtmlGenerator';
 import { useToast } from '@/hooks/use-toast';
-import { Progress } from '@/components/ui/progress';
 
 interface ResultsDashboardProps {
   result: AnalysisResult;
@@ -16,23 +15,23 @@ interface ResultsDashboardProps {
 }
 
 export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
-  const { generatePdf, isGenerating, progress } = usePdfGenerator();
+  const { generateHtml, isGenerating } = useHtmlGenerator();
   const { toast } = useToast();
   const [displayLanguage, setDisplayLanguage] = useState<DisplayLanguage>('hindi');
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadHtml = async () => {
     try {
-      await generatePdf(result);
+      await generateHtml(result, 'normal', displayLanguage);
       toast({
-        title: "PDF Downloaded",
-        description: "Your analysis report has been downloaded successfully.",
+        title: 'Response Sheet Downloaded',
+        description: 'Your HTML response sheet has been downloaded successfully.',
       });
     } catch (error) {
-      console.error('PDF generation failed:', error);
+      console.error('HTML generation failed:', error);
       toast({
-        title: "PDF Generation Failed",
-        description: "Failed to generate PDF. Please try again.",
-        variant: "destructive",
+        title: 'Download Failed',
+        description: 'Failed to generate HTML response sheet. Please try again.',
+        variant: 'destructive',
       });
     }
   };
@@ -64,7 +63,7 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
               <Button
                 variant="default"
                 size="sm"
-                onClick={handleDownloadPdf}
+                onClick={handleDownloadHtml}
                 disabled={isGenerating}
                 className="gap-2"
               >
@@ -78,16 +77,6 @@ export const ResultsDashboard = ({ result, onBack }: ResultsDashboardProps) => {
               </Button>
             </div>
           </div>
-          
-          {/* PDF Generation Progress */}
-          {isGenerating && (
-            <div className="mt-3">
-              <Progress value={progress} className="h-2" />
-              <p className="text-xs text-muted-foreground mt-1 text-center">
-                Generating PDF with all 100 questions... {progress}%
-              </p>
-            </div>
-          )}
         </div>
       </header>
 
