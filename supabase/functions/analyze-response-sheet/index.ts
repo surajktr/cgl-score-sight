@@ -346,33 +346,38 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
 function parseCandidateInfo(html: string): CandidateInfo {
   const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const splitDateShift = (value: string) => {
-    const normalized = value.replace(/\s+/g, ' ').trim();
-    if (!normalized) return { date: '', shift: '' };
-
-    const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
-    const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN)\b/i);
-
-    return {
-      date: dateMatch ? dateMatch[0].trim() : '',
-      shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : '',
-    };
-  };
+  // Helper to extract value from a specific table row context if possible
+  // This simulates the "find the table first" logic by looking for a sequence
+  // "Roll Number...value...Exam Date...value" within a reasonable character distance
+  // However, regex lookahead across large distances is expensive.
+  // Instead, we'll try to be more robust with the cell content matching.
 
   const getTableValue = (label: string): string => {
     const escapedLabel = escapeRegExp(label);
 
-    // Capture the full contents of the value <td> to support nested tags.
-    const regex = new RegExp(
-      `<td[^>]*>\\s*[^<]*${escapedLabel}[^<]*\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
+    // Optimized Regex 1: Standard Table Row <tr><td>Label</td><td>Value</td></tr>
+    // Matches explicit cell boundaries, trims whitespace/nbsp
+    const regexStandard = new RegExp(
+      `<td[^>]*>\\s*(?:<[^>]+>)*\\s*${escapedLabel}\\s*(?:<[^>]+>)*\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
       'i'
     );
-    const match = html.match(regex);
-    if (match) {
-      return stripHtml(match[1]);
+    const matchStandard = html.match(regexStandard);
+    if (matchStandard) {
+      return stripHtml(matchStandard[1]).trim();
     }
 
-    // Fallback for some formats where the value is plain text right after <td>
+    // Optimized Regex 2: Cell with nested elements or extra attributes
+    // e.g. <td ...><b>Label</b></td>
+    const regexNested = new RegExp(
+      `<td[^>]*>[^<]*${escapedLabel}[^<]*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
+      'i'
+    );
+    const matchNested = html.match(regexNested);
+    if (matchNested) {
+      return stripHtml(matchNested[1]).trim();
+    }
+
+    // Fallback: Plain text value (rare but happens in some older formats)
     const regexPlain = new RegExp(
       `<td[^>]*>[^<]*${escapedLabel}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
       'i'
@@ -383,6 +388,20 @@ function parseCandidateInfo(html: string): CandidateInfo {
     }
 
     return '';
+  };
+
+  const splitDateShift = (value: string) => {
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) return { date: '', shift: '' };
+
+    const dateMatch = normalized.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+    // Enhanced shift matching for "11:00 AM - 1:15 PM" format
+    const shiftMatch = normalized.match(/\b(shift\s*[-:]*\s*\d+|morning|afternoon|evening|forenoon|FN|AN|\d{1,2}:\d{2}\s*(?:AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:AM|PM))\b/i);
+
+    return {
+      date: dateMatch ? dateMatch[0].trim() : '',
+      shift: shiftMatch ? shiftMatch[0].replace(/\s+/g, ' ').trim() : '',
+    };
   };
 
   const explicitDate = getTableValue('Test Date') || getTableValue('Exam Date') || getTableValue('Examination Date') || getTableValue('Date of Exam') || '';
