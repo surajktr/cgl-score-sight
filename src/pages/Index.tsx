@@ -8,87 +8,6 @@ import { EXAM_CONFIGS, type ExamType, type Language } from '@/lib/examConfig';
 import { FileText, Shield, Zap } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-const normalizeCandidateLabel = (value: string) =>
-  value
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/[:：]/g, '')
-    .trim()
-    .toLowerCase();
-
-const parseCandidateInfoFromHtml = (html: string) => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const kvMap: Record<string, string> = {};
-
-  doc.querySelectorAll('tr').forEach((tr) => {
-    const tds = tr.querySelectorAll('td');
-    if (tds.length >= 2) {
-      const key = normalizeCandidateLabel(tds[0].textContent || '');
-      const value = (tds[1].textContent || '').replace(/\s+/g, ' ').trim();
-      if (key && value && !kvMap[key]) kvMap[key] = value;
-    }
-  });
-
-  const get = (...aliases: string[]) => {
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeCandidateLabel(alias);
-      if (kvMap[normalizedAlias]) return kvMap[normalizedAlias];
-    }
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeCandidateLabel(alias);
-      for (const [key, value] of Object.entries(kvMap)) {
-        if (key.includes(normalizedAlias) || normalizedAlias.includes(key)) return value;
-      }
-    }
-    return '';
-  };
-
-  return {
-    rollNumber: get('Roll Number', 'Roll No', 'Roll No.'),
-    name: get('Candidate Name', 'Participant Name', 'Name'),
-    examLevel: get('Subject', 'Exam Level', 'Post Name'),
-    testDate: get('Exam Date', 'Test Date', 'Date of Exam'),
-    shift: get('Exam Time', 'Test Time', 'Shift', 'Exam Timing'),
-    centreName: get(
-      'Venue Name',
-      'Venue Name & Address',
-      'Venue Address',
-      'Venue',
-      'Center Name',
-      'Centre Name',
-      'Exam Center Name',
-      'Exam Centre Name',
-      'Test Center Name',
-      'Test Centre Name'
-    ),
-  };
-};
-
-const fetchCandidateInfoFromHtmlUrl = async (url: string) => {
-  const proxyUrls = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  ];
-
-  for (const proxyUrl of proxyUrls) {
-    try {
-      const res = await fetch(proxyUrl, { method: 'GET', headers: { Accept: 'text/html' } });
-      if (!res.ok) continue;
-      const html = await res.text();
-      if (!html || html.length < 300) continue;
-      const parsed = parseCandidateInfoFromHtml(html);
-      if (parsed.rollNumber || parsed.name || parsed.centreName) {
-        return parsed;
-      }
-    } catch {
-      // try next proxy
-    }
-  }
-
-  return null;
-};
-
 // Fix CGL Mains subject distribution: reassign questions by sequential order
 // SSC answer keys reset Q.1-Q.30 per section, so we use order of appearance
 function fixCglMainsSubjectDistribution(data: AnalysisResult): AnalysisResult {
@@ -185,7 +104,7 @@ const Index = () => {
     setAppState('loading');
 
     // Start the API call
-    analysisPromise.current = analyzeResponseSheet(url, examType, language).then(async response => {
+    analysisPromise.current = analyzeResponseSheet(url, examType, language).then(response => {
       if (response.success && response.data) {
         // Fix CGL Mains: reassign questions to correct subjects by sequential order
         // and recalculate all sections/scores with correct local config
@@ -210,26 +129,6 @@ const Index = () => {
             );
           }
         }
-        const hasMissingCandidateInfo = !fixedData.candidate.centreName || !fixedData.candidate.testDate || !fixedData.candidate.shift;
-        const shouldUseCandidateHtmlFallback =
-          examType === 'SSC_CGL_MAINS' ||
-          examType.startsWith('RRB_') ||
-          examType.startsWith('IB_');
-        if (hasMissingCandidateInfo && shouldUseCandidateHtmlFallback) {
-          const candidateFromHtml = await fetchCandidateInfoFromHtmlUrl(url);
-          if (candidateFromHtml) {
-            fixedData.candidate = {
-              ...fixedData.candidate,
-              rollNumber: fixedData.candidate.rollNumber || candidateFromHtml.rollNumber,
-              name: fixedData.candidate.name || candidateFromHtml.name,
-              examLevel: fixedData.candidate.examLevel || candidateFromHtml.examLevel,
-              testDate: fixedData.candidate.testDate || candidateFromHtml.testDate,
-              shift: fixedData.candidate.shift || candidateFromHtml.shift,
-              centreName: fixedData.candidate.centreName || candidateFromHtml.centreName,
-            };
-          }
-        }
-
         setAnalysisResult(fixedData);
       } else {
         toast({

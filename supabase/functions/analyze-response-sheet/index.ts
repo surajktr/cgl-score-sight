@@ -344,73 +344,41 @@ function generatePartUrls(inputUrl: string, examConfig: ExamConfig): { part: str
 
 // Parse candidate info from the HTML
 function parseCandidateInfo(html: string): CandidateInfo {
-  const normalizeKey = (value: string) =>
-    value
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .replace(/[:：]/g, '')
-      .trim()
-      .toLowerCase();
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const kvMap: Record<string, string> = {};
-  const tdPairRegex = /<td[^>]*>([\s\S]*?)<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/gi;
-  let tdMatch;
-  while ((tdMatch = tdPairRegex.exec(html)) !== null) {
-    const rawKey = stripHtml(tdMatch[1]);
-    const rawValue = stripHtml(tdMatch[2]);
-    const key = normalizeKey(rawKey);
-    const value = rawValue.replace(/\s+/g, ' ').trim();
-    if (key && value && !kvMap[key]) {
-      kvMap[key] = value;
-    }
-  }
+  const getTableValue = (label: string): string => {
+    const escapedLabel = escapeRegExp(label);
 
-  const getByAliases = (...aliases: string[]): string => {
-    for (const alias of aliases) {
-      const key = normalizeKey(alias);
-      if (kvMap[key]) return kvMap[key];
+    // Capture the full contents of the value <td> to support nested tags.
+    const regex = new RegExp(
+      `<td[^>]*>\\s*[^<]*${escapedLabel}[^<]*\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
+      'i'
+    );
+    const match = html.match(regex);
+    if (match) {
+      return stripHtml(match[1]);
     }
-    for (const alias of aliases) {
-      const aliasKey = normalizeKey(alias);
-      for (const [key, value] of Object.entries(kvMap)) {
-        if (key.includes(aliasKey) || aliasKey.includes(key)) {
-          return value;
-        }
-      }
-    }
-    return '';
-  };
 
-  const getByKeyIncludesAny = (...keywords: string[]): string => {
-    const normalizedKeywords = keywords.map(k => normalizeKey(k));
-    for (const [key, value] of Object.entries(kvMap)) {
-      if (normalizedKeywords.some(k => key.includes(k))) {
-        return value;
-      }
+    // Fallback for some formats where the value is plain text right after <td>
+    const regexPlain = new RegExp(
+      `<td[^>]*>[^<]*${escapedLabel}[^<]*<\\/td>\\s*<td[^>]*>:?(?:&nbsp;)*\\s*([^<]+)`,
+      'i'
+    );
+    const matchPlain = html.match(regexPlain);
+    if (matchPlain) {
+      return matchPlain[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
     }
+
     return '';
   };
 
   return {
-    rollNumber: getByAliases('Roll Number', 'Roll No', 'Roll No.'),
-    name: getByAliases('Candidate Name', 'Participant Name', 'Name'),
-    examLevel: getByAliases('Exam Level', 'Post Name', 'Subject'),
-    testDate: getByAliases('Test Date', 'Exam Date', 'Date of Exam'),
-    shift: getByAliases('Test Time', 'Shift', 'Exam Time', 'Exam Timing'),
-    centreName:
-      getByAliases(
-        'Test Center Name',
-        'Test Centre Name',
-        'Centre Name',
-        'Center Name',
-        'Exam Centre',
-        'Venue Name',
-        'Venue',
-        'Venue Name & Address',
-        'Venue Address',
-        'Exam Center Name',
-        'Exam Centre Name'
-      ) || getByKeyIncludesAny('venue', 'centre', 'center'),
+    rollNumber: getTableValue('Roll No') || getTableValue('Roll Number') || '',
+    name: getTableValue('Candidate Name') || getTableValue('Participant Name') || getTableValue('Name') || '',
+    examLevel: getTableValue('Exam Level') || getTableValue('Post Name') || getTableValue('Subject') || '',
+    testDate: getTableValue('Test Date') || '',
+    shift: getTableValue('Test Time') || getTableValue('Shift') || '',
+    centreName: getTableValue('Test Center Name') || getTableValue('Test Centre Name') || getTableValue('Centre Name') || getTableValue('Center Name') || getTableValue('Exam Centre') || getTableValue('Venue Name') || getTableValue('Venue') || '',
   };
 }
 
