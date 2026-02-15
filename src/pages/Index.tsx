@@ -44,7 +44,7 @@ const parseCandidateInfoFromHtml = (html: string) => {
     }
 
     // Check if this is the candidate table by looking for essential keys
-    if (info['roll number'] || info['candidate name'] || info['roll n']) {
+    if (info['roll number'] || info['candidate name'] || info['roll no']) {
       // Helper to safely get value from map
       const getVal = (...keys: string[]) => {
         for (const k of keys) {
@@ -144,6 +144,7 @@ const parseCandidateInfoFromHtml = (html: string) => {
 
 const fetchCandidateInfoFromHtmlUrl = async (url: string) => {
   const proxyUrls = [
+    `https://r.jina.ai/http://${url.replace(/^https?:\/\//, '')}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
     `https://thingproxy.freeboard.io/fetch/${url}`,
@@ -288,12 +289,14 @@ const Index = () => {
             );
           }
         }
-        const hasMissingCandidateInfo = !fixedData.candidate.centreName || !fixedData.candidate.testDate || !fixedData.candidate.shift;
-        const shouldUseCandidateHtmlFallback =
-          examType === 'SSC_CGL_MAINS' ||
-          examType.startsWith('RRB_') ||
-          examType.startsWith('IB_');
-        if (hasMissingCandidateInfo && shouldUseCandidateHtmlFallback) {
+        const hasMissingCandidateInfo =
+          !fixedData.candidate.rollNumber ||
+          !fixedData.candidate.name ||
+          !fixedData.candidate.examLevel ||
+          !fixedData.candidate.centreName ||
+          !fixedData.candidate.testDate ||
+          !fixedData.candidate.shift;
+        if (hasMissingCandidateInfo) {
           const candidateFromHtml = await fetchCandidateInfoFromHtmlUrl(url);
           if (candidateFromHtml) {
             fixedData.candidate = {
