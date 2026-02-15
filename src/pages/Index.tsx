@@ -17,6 +17,32 @@ const normalizeCandidateLabel = (value: string) =>
     .toLowerCase();
 
 const parseCandidateInfoFromHtml = (html: string) => {
+  const isPlainText = !/(<table|<td|<tr)/i.test(html);
+  if (isPlainText) {
+    const text = html.replace(/\r\n?/g, '\n');
+    const pick = (...regexes: RegExp[]) => {
+      for (const rx of regexes) {
+        const m = text.match(rx);
+        if (m && m[1]) return m[1].replace(/\s+/g, ' ').trim();
+      }
+      return '';
+    };
+    const combinedDateShift = pick(
+      /(?:Test|Exam)\s*Date\s*&?\s*(?:\&|and)?\s*Time\s*[:：]\s*([^\n]+)/i,
+      /Date\s*&\s*Shift\s*[:：]\s*([^\n]+)/i
+    );
+    const dateMatch = (combinedDateShift || text).match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/);
+    const timeMatch = (combinedDateShift || text).match(/\b\d{1,2}:\d{2}\s*(?:AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:AM|PM)\b/i);
+    return {
+      rollNumber: pick(/Roll\s*No\.?\s*[:：]\s*([^\n]+)/i, /Roll\s*Number\s*[:：]\s*([^\n]+)/i),
+      name: pick(/Candidate\s*Name\s*[:：]\s*([^\n]+)/i, /Participant\s*Name\s*[:：]\s*([^\n]+)/i, /Name\s*[:：]\s*([^\n]+)/i),
+      examLevel: pick(/Exam\s*Level\s*[:：]\s*([^\n]+)/i, /Post\s*Name\s*[:：]\s*([^\n]+)/i, /Subject\s*[:：]\s*([^\n]+)/i),
+      testDate: pick(/(?:Test|Exam|Examination)\s*Date\s*[:：]\s*([^\n]+)/i) || (dateMatch ? dateMatch[0] : ''),
+      shift: pick(/(?:Test\s*Time|Exam\s*Time|Examination\s*Time|Shift)\s*[:：]\s*([^\n]+)/i) || (timeMatch ? timeMatch[0] : ''),
+      centreName: pick(/(?:Venue\s*Name\s*&?\s*Address|Venue\s*Name|Venue|Exam\s*Centre|Exam\s*Center|Centre\s*Name|Center\s*Name|Test\s*Centre\s*Name|Test\s*Center\s*Name)\s*[:：]\s*([^\n]+)/i),
+    };
+  }
+
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
