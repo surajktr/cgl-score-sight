@@ -44,7 +44,7 @@ const parseCandidateInfoFromHtml = (html: string) => {
     }
 
     // Check if this is the candidate table by looking for essential keys
-    if (info['roll number'] || info['candidate name'] || info['roll no']) {
+    if (info['roll number'] || info['candidate name'] || info['roll n']) {
       // Helper to safely get value from map
       const getVal = (...keys: string[]) => {
         for (const k of keys) {
