@@ -169,12 +169,33 @@ const parseCandidateInfoFromHtml = (html: string) => {
 };
 
 const fetchCandidateInfoFromHtmlUrl = async (url: string) => {
+  const scheme = url.startsWith('https://') ? 'https://' : 'http://';
   const proxyUrls = [
-    `https://r.jina.ai/http://${url.replace(/^https?:\/\//, '')}`,
+    `https://r.jina.ai/${scheme}${url.replace(/^https?:\/\//, '')}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
     `https://thingproxy.freeboard.io/fetch/${url}`,
   ];
+
+  const scoreCandidate = (candidate: {
+    rollNumber: string;
+    name: string;
+    examLevel: string;
+    testDate: string;
+    shift: string;
+    centreName: string;
+  }) =>
+    [
+      candidate.rollNumber,
+      candidate.name,
+      candidate.examLevel,
+      candidate.testDate,
+      candidate.shift,
+      candidate.centreName,
+    ].filter(Boolean).length;
+
+  let bestParsed: ReturnType<typeof parseCandidateInfoFromHtml> | null = null;
+  let bestScore = 0;
 
   for (const proxyUrl of proxyUrls) {
     try {
@@ -183,15 +204,21 @@ const fetchCandidateInfoFromHtmlUrl = async (url: string) => {
       const html = await res.text();
       if (!html || html.length < 300) continue;
       const parsed = parseCandidateInfoFromHtml(html);
-      if (parsed.rollNumber || parsed.name || parsed.centreName) {
-        return parsed;
+      const parsedScore = scoreCandidate(parsed);
+      if (parsedScore > bestScore) {
+        bestScore = parsedScore;
+        bestParsed = parsed;
       }
+
+      const hasIdentity = parsed.rollNumber || parsed.name || parsed.centreName;
+      const hasDateAndShift = !!parsed.testDate && !!parsed.shift;
+      if (hasIdentity && hasDateAndShift) return parsed;
     } catch {
       // try next proxy
     }
   }
 
-  return null;
+  return bestParsed;
 };
 
 // Fix CGL Mains subject distribution: reassign questions by sequential order

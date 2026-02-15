@@ -1,7 +1,7 @@
-import { supabase } from '@/integrations/supabase/client';
 import type { AnalysisResult } from '@/lib/mockData';
 import { EXAM_CONFIGS, type ExamType, type Language } from '@/lib/examConfig';
 import { analyzeResponseSheetLocal } from '@/lib/localParser';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AnalyzeResponse {
   success: boolean;
@@ -11,29 +11,12 @@ interface AnalyzeResponse {
   data?: AnalysisResult;
 }
 
-// Fetch HTML from URL using a hidden iframe (works for same-origin or CORS-enabled resources)
-async function fetchHtmlViaIframe(url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      console.log('Iframe fetch timed out');
-      resolve(null);
-    }, 15000);
-
-    // Try using fetch with no-cors mode first (won't get body but tests reachability)
-    // Then fall back to creating a script tag that loads the HTML as JSONP-style (won't work for SSC)
-    // This is a best-effort approach
-
-    // For SSC URLs, direct fetch won't work due to CORS
-    // Instead, we return null to trigger the "paste HTML" fallback message
-    clearTimeout(timeout);
-    resolve(null);
-  });
-}
-
 // Try fetching HTML using a CORS proxy (free tier)
 async function fetchHtmlViaProxy(url: string): Promise<string | null> {
+  const scheme = url.startsWith('https://') ? 'https://' : 'http://';
   // List of free CORS proxies to try
   const proxies = [
+    `https://r.jina.ai/${scheme}${url.replace(/^https?:\/\//, '')}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
     `https://thingproxy.freeboard.io/fetch/${url}`,
@@ -96,7 +79,6 @@ export async function analyzeResponseSheet(
 
       if (html) {
         // Use local parser directly to avoid sending large HTML back to server
-        // This also leverages the improved CGL Mains parser we just added
         console.log('Got HTML via CORS proxy, analyzing locally...');
         const config = EXAM_CONFIGS[examType];
         if (!config) throw new Error('Invalid exam type');
